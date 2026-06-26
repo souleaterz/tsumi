@@ -11,6 +11,8 @@
 //   Real-Debrid key for reliable playback.
 // ─────────────────────────────────────────────────────────────
 
+import { getProviderStream, isProviderEnabled } from './provider';
+
 const TORRENTIO_BASE =
   process.env.NEXT_PUBLIC_TORRENTIO_BASE || 'https://torrentio.strem.fun';
 const ANIZIP_BASE = process.env.NEXT_PUBLIC_ANIZIP_BASE || 'https://api.ani.zip';
@@ -55,6 +57,10 @@ export interface StreamSource {
   playUrl?: string;
   /** True when the release carries an English dub (incl. dual/multi-audio). */
   dub?: boolean;
+  /** Direct (already-proxied) HLS URL — provider sources play this as-is. */
+  hlsUrl?: string;
+  /** Subtitle tracks (provider sources). */
+  subtitles?: { url: string; lang: string }[];
 }
 
 /** Detect a dub-capable release from its name (dual/multi-audio counts). */
@@ -299,18 +305,59 @@ export async function resolveNyaa(
   }
 }
 
+/** Route a provider HLS/subtitle URL through our CORS+Referer proxy. */
+function hlsProxy(url: string, referer?: string): string {
+  const ref = referer ? `&ref=${encodeURIComponent(referer)}` : '';
+  return `/api/hls?url=${encodeURIComponent(url)}${ref}`;
+}
+
+/** Build a StreamSource from a streaming-provider (Consumet) result. */
+async function resolveProvider(
+  anilistId: number,
+  episode: number,
+  dub: boolean,
+): Promise<StreamSource[]> {
+  const stream = await getProviderStream(anilistId, episode, dub);
+  if (!stream) return [];
+  return [
+    {
+      title: `${dub ? 'Dub' : 'Sub'} · HD`,
+      hlsUrl: hlsProxy(stream.url, stream.referer),
+      quality: '1080p',
+      cached: true,
+      dub: stream.dub,
+      subtitles: stream.subtitles.map((s) => ({
+        url: hlsProxy(s.url, stream.referer),
+        lang: s.lang,
+      })),
+      source: 'Provider',
+    },
+  ];
+}
+
 /**
- * Resolve stream sources for an anime episode. Tries Torrentio first
- * (AniList→Kitsu via Anizip). In WebTorrent (no-debrid) mode, falls back to
- * Nyaa RSS when a `title` is supplied and Torrentio yields nothing — the Nyaa
- * fallback is skipped under Real-Debrid since its magnets aren't RD-resolved.
+ * Resolve stream sources for an anime episode.
+ *
+ * When a streaming provider is configured (`CONSUMET_API_URL`) it's tried first
+ * — it has native sub AND dub HLS. Otherwise (or for sub when the provider has
+ * nothing) it falls back to Torrentio/Real-Debrid, then Nyaa. `dub` only ever
+ * resolves from the provider; if none exists, returns empty.
  */
 export async function resolveStreams(
   anilistId: number,
   episode: number,
   title?: string,
+  dub = false,
 ): Promise<StreamSource[]> {
   try {
+    if (isProviderEnabled) {
+      const provider = await resolveProvider(anilistId, episode, dub);
+      if (provider.length > 0) return provider;
+      if (dub) return []; // dub only comes from the provider
+    } else if (dub) {
+      return []; // no provider → no real dub support
+    }
+
     const torrentio = await resolveTorrentio(anilistId, episode);
     if (torrentio.length > 0) return rankSources(torrentio);
 

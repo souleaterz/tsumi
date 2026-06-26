@@ -136,6 +136,30 @@ RD link and redirects the browser to it, so the key never leaves the server.
 > Sources marked ⚡ are RD-cached (instant). Uncached torrents may need RD to download
 > first. The source picker prefers cached + highest quality.
 
+## 4c. (Optional) Streaming provider — native Sub + Dub
+
+Real-Debrid streams Japanese-audio torrents (Sub). For reliable **English Dub** (and to
+avoid mkv transcoding entirely), configure a streaming provider — it returns ready-to-play
+HLS with native sub/dub. When set, it's the **primary** source and Real-Debrid becomes the
+fallback.
+
+1. **Self-host a Consumet instance** (the public ones are taken down):
+   - Clone [consumet/api.consumet.org](https://github.com/consumet/api.consumet.org).
+   - Deploy to Render / Railway / Fly (free tiers work). You'll get a URL.
+2. Add to Vercel env:
+
+| Key | Value |
+| --- | --- |
+| `CONSUMET_API_URL` | your instance URL, e.g. `https://my-consumet.onrender.com` |
+| `CONSUMET_PROVIDER` | `zoro` (HiAnime — best dub) or `gogoanime` |
+
+Redeploy. The Sub/Dub toggle now pulls real sub & dub streams from the provider; subtitles
+load automatically. Provider HLS is routed through the app's `/api/hls` proxy (the provider
+CDNs require a `Referer` header browsers can't set).
+
+> Provider scraping is inherently less stable than Real-Debrid — keep `REALDEBRID_API_KEY`
+> set so Sub still works if the provider has an outage.
+
 ## 5. (Optional) Pre-roll ads & source endpoints
 
 | Key | Default | Notes |

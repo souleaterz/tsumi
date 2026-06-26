@@ -6,6 +6,7 @@ import '@vidstack/react/player/styles/default/layouts/video.css';
 import {
   MediaPlayer,
   MediaProvider,
+  Track,
   type MediaPlayerInstance,
 } from '@vidstack/react';
 import {
@@ -56,6 +57,7 @@ export function VidstackPlayer({
   const [speed, setSpeed] = useState(0);
   // Progressive-MP4 URL to fall back to if an HLS transcode fails (CORS, etc.).
   const mp4FallbackRef = useRef<string | null>(null);
+  const [subtitles, setSubtitles] = useState<{ url: string; lang: string }[]>([]);
 
   // ── Resolve the magnet → streamURL via the service-worker server ──
   useEffect(() => {
@@ -66,6 +68,16 @@ export function VidstackPlayer({
     setSrc(null);
     setDownloadPct(0);
     mp4FallbackRef.current = null;
+    setSubtitles(source.subtitles ?? []);
+
+    // ── Provider: a ready-to-play (proxied) HLS stream. ──
+    if (source.hlsUrl) {
+      setSrc({ src: source.hlsUrl, type: 'application/x-mpegurl' });
+      setStatus('ready');
+      return () => {
+        destroyed = true;
+      };
+    }
 
     // ── Real-Debrid: resolve a browser-playable stream. No WebTorrent needed. ──
     if (source.playUrl) {
@@ -210,8 +222,10 @@ export function VidstackPlayer({
     }
   }, [startAt]);
 
-  // Direct (Real-Debrid) playback vs WebTorrent P2P for the active source.
-  const isDirect = Boolean(sources[sourceIdx]?.playUrl);
+  // Direct (Real-Debrid / provider HLS) playback vs WebTorrent P2P.
+  const active = sources[sourceIdx];
+  const isDirect = Boolean(active?.playUrl || active?.hlsUrl);
+  const isProvider = Boolean(active?.hlsUrl);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-black shadow-glow-lg">
@@ -238,7 +252,18 @@ export function VidstackPlayer({
           }}
           className="h-full w-full"
         >
-          <MediaProvider />
+          <MediaProvider>
+            {subtitles.map((s, i) => (
+              <Track
+                key={`${s.lang}-${i}`}
+                src={s.url}
+                kind="subtitles"
+                label={s.lang}
+                lang={s.lang.slice(0, 2).toLowerCase()}
+                default={/english/i.test(s.lang)}
+              />
+            ))}
+          </MediaProvider>
           <DefaultVideoLayout icons={defaultLayoutIcons} colorScheme="dark" />
         </MediaPlayer>
       )}
@@ -281,7 +306,9 @@ export function VidstackPlayer({
           <span className="flex items-center gap-1.5 rounded-md bg-base/70 px-2 py-1 text-[11px] text-zinc-300 backdrop-blur">
             <Wifi className="h-3 w-3 text-primary" />
             {isDirect
-              ? 'Real-Debrid · direct stream'
+              ? isProvider
+                ? 'Direct stream'
+                : 'Real-Debrid · direct stream'
               : `${peers} peers · ${(speed / 1024 / 1024).toFixed(1)} MB/s · ${downloadPct}%`}
           </span>
           {sources.length > 1 && (

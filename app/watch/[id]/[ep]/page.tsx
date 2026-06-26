@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { ChevronLeft } from 'lucide-react';
 import { getAnimeDetail } from '@/lib/anilist/client';
 import { resolveStreams, getEpisodeMeta, isDebridEnabled } from '@/lib/stream/sources';
+import { isProviderEnabled } from '@/lib/stream/provider';
 import { bestTitle } from '@/lib/utils';
 import { getProStatus, currentUserId } from '@/lib/subscription';
 import { WatchExperience } from '@/components/watch/watch-experience';
@@ -43,6 +44,7 @@ export default async function WatchPage({ params, searchParams }: Props) {
     id,
     ep,
     media.title.romaji || media.title.english || undefined,
+    audioPref === 'dub',
   );
 
   // Sanitise for the client: Real-Debrid sources carry a resolver URL with the
@@ -64,10 +66,13 @@ export default async function WatchPage({ params, searchParams }: Props) {
 
   // All quality tiers are available to everyone — HD sources are usually the
   // best-seeded / cached ones, so capping free users only hurt performance.
-  // Sub shows everything (all releases are subbed); Dub filters to dub-capable.
-  const hasDub = sources.some((s) => s.dub);
+  // With a provider, dub is fetched on demand, so always offer the toggle.
+  // Otherwise, only offer Dub when a dub-capable release was found.
+  const hasDub = isProviderEnabled || sources.some((s) => s.dub);
   const availableSources =
-    audioPref === 'dub' && hasDub ? sources.filter((s) => s.dub) : sources;
+    audioPref === 'dub' && sources.some((s) => s.dub)
+      ? sources.filter((s) => s.dub)
+      : sources;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
