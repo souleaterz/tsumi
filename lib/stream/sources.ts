@@ -48,6 +48,15 @@ export interface StreamSource {
    * sources after the watch page sanitises them; the player plays it directly.
    */
   playUrl?: string;
+  /** True when the release carries an English dub (incl. dual/multi-audio). */
+  dub?: boolean;
+}
+
+/** Detect a dub-capable release from its name (dual/multi-audio counts). */
+function parseDub(title: string): boolean {
+  return /dual.?audio|multi.?audio|multi.?sub.?dub|\bdubbed?\b|\beng(?:lish)?.?dub\b/i.test(
+    title,
+  );
 }
 
 /** Build a magnet URI from a Torrentio infoHash with sensible public trackers. */
@@ -173,6 +182,7 @@ async function resolveTorrentio(
       const meta = parseTorrentioMeta(String(s.title ?? ''));
       // Torrentio marks Real-Debrid cached torrents with "RD+"/⚡ in the name.
       const cached = /RD\+|⚡/.test(name);
+      const dub = parseDub(fullTitle);
 
       if (s.url) {
         // Real-Debrid mode: a directly-resolvable stream URL.
@@ -183,6 +193,7 @@ async function resolveTorrentio(
           seeders: meta.seeders,
           size: meta.size,
           cached,
+          dub,
           source: 'Real-Debrid',
         } as StreamSource;
       }
@@ -196,6 +207,7 @@ async function resolveTorrentio(
           quality: parseQuality(fullTitle),
           seeders: meta.seeders,
           size: meta.size,
+          dub,
           source: 'Torrentio',
         } as StreamSource;
       }
@@ -263,6 +275,7 @@ export async function resolveNyaa(
         quality: parseQuality(name),
         seeders: Number(rssField(item, 'nyaa:seeders')) || undefined,
         size: rssField(item, 'nyaa:size'),
+        dub: parseDub(name),
         source: 'Nyaa',
       });
       if (sources.length >= 15) break;

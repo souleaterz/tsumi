@@ -15,7 +15,13 @@ export function EpisodeNav({
 }) {
   const router = useRouter();
   const hasPrev = episode > 1;
+  const count = Math.max(totalEpisodes, 1);
   const hasNext = episode < totalEpisodes;
+  const all = Array.from({ length: count }, (_, i) => i + 1);
+
+  // Group into ranges of 50 (as optgroups) so long shows don't get a giant flat list.
+  const RANGE = 50;
+  const grouped = count > RANGE;
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -32,11 +38,25 @@ export function EpisodeNav({
         onChange={(e) => router.push(`/watch/${anilistId}/${e.target.value}`)}
         className="rounded-md border border-white/10 bg-surface/60 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-primary/60"
       >
-        {Array.from({ length: Math.max(totalEpisodes, 1) }, (_, i) => i + 1).map((ep) => (
-          <option key={ep} value={ep}>
-            Episode {ep}
-          </option>
-        ))}
+        {grouped
+          ? Array.from({ length: Math.ceil(count / RANGE) }, (_, g) => {
+              const start = g * RANGE + 1;
+              const end = Math.min(start + RANGE - 1, count);
+              return (
+                <optgroup key={g} label={`Episodes ${start}–${end}`}>
+                  {all.slice(start - 1, end).map((ep) => (
+                    <option key={ep} value={ep}>
+                      Episode {ep}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })
+          : all.map((ep) => (
+              <option key={ep} value={ep}>
+                Episode {ep}
+              </option>
+            ))}
       </select>
 
       <Link

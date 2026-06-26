@@ -12,6 +12,7 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { WatchlistButton } from '@/components/anime/watchlist-button';
 import { EpisodeList } from '@/components/anime/episode-list';
 import { Countdown } from '@/components/ui/countdown';
+import { getBestTrailerId } from '@/lib/trailer';
 
 export const revalidate = 1800;
 
@@ -60,6 +61,12 @@ export default async function AnimeDetailPage({ params }: Props) {
   const accent = media.coverImage?.color || '#7C3AED';
   const studio = media.studios?.nodes?.find((s) => s.isAnimationStudio);
   const recommendations: any[] = (media as any).recommendations?.nodes ?? [];
+  // English-preferred trailer (YouTube search when configured; else AniList's).
+  const trailerId = await getBestTrailerId(
+    media.title.english,
+    media.title.romaji,
+    media.trailer?.site === 'youtube' ? media.trailer.id : null,
+  );
 
   return (
     <div className="relative">
@@ -188,12 +195,12 @@ export default async function AnimeDetailPage({ params }: Props) {
         </div>
 
         {/* Trailer */}
-        {media.trailer?.site === 'youtube' && media.trailer.id && (
+        {trailerId && (
           <section className="mt-14">
             <SectionHeader title="Trailer" jp="予告編" />
             <div className="aspect-video w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 shadow-glow">
               <iframe
-                src={`https://www.youtube.com/embed/${media.trailer.id}`}
+                src={`https://www.youtube.com/embed/${trailerId}`}
                 title="Trailer"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
