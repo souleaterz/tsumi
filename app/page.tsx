@@ -108,10 +108,11 @@ export default async function HomePage() {
           <div className="relative z-10 max-w-xl">
             <span className="katakana text-xs">ツミ・プロ</span>
             <h2 className="mt-2 text-4xl text-white sm:text-5xl">
-              Go Pro. <span className="text-accent text-glow">No Ads. 1080p.</span>
+              Go Pro. <span className="text-accent text-glow">No Ads. Ever.</span>
             </h2>
             <p className="mt-3 text-zinc-300">
-              Unlock full HD streaming, remove all ads, and support Tsumi for just
+              HD streaming is free for everyone. Go Pro to remove all ads, get early
+              access to new features, and support Tsumi for just
               <span className="font-semibold text-white"> £0.99/month</span>. Cancel
               anytime.
             </p>

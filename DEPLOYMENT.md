@@ -108,7 +108,7 @@ to Supabase per user.
 | `STRIPE_WEBHOOK_SECRET` | the `whsec_…` signing secret |
 
 The webhook mirrors subscription state into Supabase `subscriptions`; `getProStatus()`
-reads it server-side to skip ads and unlock 1080p+ for Pro users.
+reads it server-side so Pro users skip the pre-roll ad. (All quality tiers are free.)
 
 > **Test mode first:** use Stripe test keys + card `4242 4242 4242 4242`. Switch to
 > live keys when ready.
@@ -156,7 +156,7 @@ RD link and redirects the browser to it, so the key never leaves the server.
    - [ ] Add an anime to your watchlist → reload → it persists (Supabase, not just localStorage).
    - [ ] Open an episode under `/watch/...` → free tier shows the pre-roll, then the player.
    - [ ] `/profile` → **Upgrade to Pro** → complete Stripe test checkout → return shows
-         "Tsumi Pro Active"; the pre-roll no longer appears and 1080p sources unlock.
+         "Tsumi Pro Active" and the pre-roll no longer appears.
    - [ ] `https://YOUR_APP_URL/sitemap.xml`, `/robots.txt`, and `/opengraph-image` all load.
 
 ---

@@ -80,7 +80,7 @@ fail gracefully when unset. To fully enable everything:
    Stripe dashboard — the UI figure is display-only), point a webhook at
    `/api/stripe/webhook` with `STRIPE_WEBHOOK_SECRET`. The webhook mirrors subscription
    state into Supabase; `lib/subscription.ts` reads it server-side (service-role) to gate
-   Pro — Pro users skip the pre-roll ad and unlock 1080p+ sources (free tier caps at 720p).
+   Pro — Pro users skip the pre-roll ad. (All quality tiers are free for everyone.)
 4. **IMA ads** — set `NEXT_PUBLIC_IMA_AD_TAG` for real pre-roll inventory.
 
 ## SEO & social

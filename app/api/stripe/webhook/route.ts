@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/stripe/webhook
  * Mirrors Stripe subscription state into Supabase so the app can gate Pro
- * features (no ads, 1080p). Configure STRIPE_WEBHOOK_SECRET and point a
+ * features (ad-free playback). Configure STRIPE_WEBHOOK_SECRET and point a
  * Stripe webhook at this route for checkout + subscription events.
  */
 export async function POST(req: Request) {

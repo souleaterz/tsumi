@@ -5,9 +5,9 @@ import { Crown, Loader2, Check } from 'lucide-react';
 
 const PRO_PERKS = [
   'Remove all ads',
-  'Unlock 1080p Full HD',
-  'Priority stream sources',
-  'Support Tsumi',
+  'Uninterrupted, instant playback',
+  'Early access to new features',
+  'Support Tsumi & server costs',
 ];
 
 export function ProCard({ isPro = false }: { isPro?: boolean }) {
@@ -40,7 +40,7 @@ export function ProCard({ isPro = false }: { isPro?: boolean }) {
           <Crown className="h-8 w-8 text-amber-400" />
           <div>
             <p className="font-heading text-2xl tracking-wide text-white">Tsumi Pro</p>
-            <p className="text-sm text-accent">Active · No ads · 1080p unlocked</p>
+            <p className="text-sm text-accent">Active · Ad-free</p>
           </div>
         </div>
       </div>

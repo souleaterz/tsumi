@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
  * Reads the `subscriptions` table (mirrored from Stripe webhooks) with the
  * service-role key so it bypasses RLS and can't be spoofed from the client.
  * Returns false whenever Supabase isn't configured or the user isn't Pro —
- * so free-tier behaviour (ads, 720p cap) is always the safe default.
+ * so free-tier behaviour (shows ads) is always the safe default.
  */
 export async function getProStatus(userId: string | null): Promise<boolean> {
   if (!userId) return false;

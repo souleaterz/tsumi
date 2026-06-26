@@ -9,9 +9,6 @@ import { getProStatus, currentUserId } from '@/lib/subscription';
 import { WatchExperience } from '@/components/watch/watch-experience';
 import { EpisodeNav } from '@/components/watch/episode-nav';
 
-// Free tier streams up to 720p; 1080p/4K are unlocked by Tsumi Pro.
-const HD_QUALITIES = new Set(['1080p', '2160p']);
-
 export const dynamic = 'force-dynamic';
 
 interface Props {
@@ -62,11 +59,9 @@ export default async function WatchPage({ params }: Props) {
   const totalEpisodes = media.episodes ?? epMeta.length ?? 1;
   const epInfo = epMeta.find((e) => e.episode === ep);
 
-  // Gate HD sources behind Pro. If capping would leave nothing playable, fall
-  // back to the full list so free users are never blocked from the content.
-  const sdSources = sources.filter((s) => !HD_QUALITIES.has(s.quality ?? ''));
-  const availableSources = isPro ? sources : sdSources.length ? sdSources : sources;
-  const hdLockedCount = isPro ? 0 : sources.length - availableSources.length;
+  // All quality tiers are available to everyone — HD sources are usually the
+  // best-seeded / cached ones, so capping free users only hurt performance.
+  const availableSources = sources;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
@@ -88,20 +83,6 @@ export default async function WatchPage({ params }: Props) {
         sources={availableSources}
         isPro={isPro}
       />
-
-      {/* HD-locked notice for free tier */}
-      {hdLockedCount > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm text-zinc-300">
-          <span className="katakana text-[9px]">プロ</span>
-          <span>
-            {hdLockedCount} HD source{hdLockedCount > 1 ? 's' : ''} (1080p+) hidden on
-            the free tier.
-          </span>
-          <Link href="/profile" className="font-semibold text-accent hover:underline">
-            Upgrade to Pro →
-          </Link>
-        </div>
-      )}
 
       {/* Title + nav */}
       <div className="mt-5 flex flex-col gap-4">
@@ -127,9 +108,7 @@ export default async function WatchPage({ params }: Props) {
         {availableSources.length > 0 && (
           <p className="text-xs text-zinc-600">
             {availableSources.length} stream source
-            {availableSources.length > 1 ? 's' : ''} available
-            {isPro && <span className="text-accent"> · Pro · up to 1080p</span>} · resolved
-            via Torrentio
+            {availableSources.length > 1 ? 's' : ''} available · resolved via Torrentio
             {isDebridEnabled
               ? ', streamed over HTTPS via Real-Debrid.'
               : ', streamed peer-to-peer via WebTorrent.'}
