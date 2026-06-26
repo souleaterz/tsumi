@@ -221,6 +221,7 @@ export function VidstackPlayer({
           src={src}
           title={`${title} — Episode ${episode}`}
           poster={coverImage}
+          autoPlay
           playsInline
           onCanPlay={onCanPlay}
           onError={() => {

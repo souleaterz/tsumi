@@ -42,6 +42,17 @@ export function formatFormat(format?: string | null): string {
   return map[format] ?? format;
 }
 
+/** Compact "time remaining" string from seconds, e.g. "2d 4h", "12m". */
+export function formatCountdown(secondsUntil: number): string {
+  if (secondsUntil <= 0) return 'Airing now';
+  const d = Math.floor(secondsUntil / 86400);
+  const h = Math.floor((secondsUntil % 86400) / 3600);
+  const m = Math.floor((secondsUntil % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 /** Pick the best available title (English preferred, falls back to romaji). */
 export function bestTitle(title?: {
   english?: string | null;

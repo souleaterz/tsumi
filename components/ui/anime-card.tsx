@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { Star, Play } from 'lucide-react';
 import type { AnilistMedia } from '@/lib/anilist/types';
 import { bestTitle, formatFormat, formatScore } from '@/lib/utils';
+import { FavouriteButton } from '@/components/ui/favourite-button';
+import { Countdown } from '@/components/ui/countdown';
 
 // A little katakana flavour to scatter on cards.
 const KATAKANA = ['アニメ', 'エピソード', '視聴', '人気', '新着'];
@@ -68,8 +70,17 @@ export function AnimeCard({
           </div>
         ) : null}
 
-        {/* Format tag + katakana */}
-        <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
+        {/* Favourite heart + format tag + katakana */}
+        <div className="absolute left-2 top-2 flex flex-col items-start gap-1.5">
+          <FavouriteButton
+            item={{
+              anilistId: media.id,
+              title,
+              coverImage: cover ?? undefined,
+              format: media.format ?? undefined,
+              addedAt: Date.now(),
+            }}
+          />
           {media.format && (
             <span className="rounded bg-primary/80 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">
               {formatFormat(media.format)}
@@ -84,10 +95,19 @@ export function AnimeCard({
         <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-white transition-colors group-hover:text-accent">
           {title}
         </h3>
-        <p className="mt-0.5 text-[11px] text-zinc-400">
-          {media.seasonYear ? media.seasonYear : ''}
-          {media.episodes ? ` · ${media.episodes} ep` : ''}
-        </p>
+        {media.nextAiringEpisode ? (
+          <Countdown
+            airingAt={media.nextAiringEpisode.airingAt}
+            episode={media.nextAiringEpisode.episode}
+            variant="compact"
+            className="mt-0.5 text-[11px] font-medium text-accent"
+          />
+        ) : (
+          <p className="mt-0.5 text-[11px] text-zinc-400">
+            {media.seasonYear ? media.seasonYear : ''}
+            {media.episodes ? ` · ${media.episodes} ep` : ''}
+          </p>
+        )}
       </div>
     </Link>
   );

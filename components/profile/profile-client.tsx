@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Bookmark, History, Clapperboard, Trash2 } from 'lucide-react';
-import { getWatchlist, removeFromWatchlist, type WatchlistItem } from '@/lib/watchlist';
+import { getWatchlist, type WatchlistItem } from '@/lib/watchlist';
 import { getContinueWatching, type ProgressEntry } from '@/lib/progress';
 import { SectionHeader } from '@/components/ui/section-header';
 import { useUserId } from '@/lib/auth/use-user-id';
+import { useWatchlist } from '@/components/watchlist-provider';
 import { ProCard } from './pro-card';
 
 type Tab = 'watchlist' | 'history';
@@ -18,6 +19,7 @@ export function ProfileClient({ isPro = false }: { isPro?: boolean }) {
   const [history, setHistory] = useState<ProgressEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const { userId, isLoaded } = useUserId();
+  const { toggle } = useWatchlist();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -30,9 +32,9 @@ export function ProfileClient({ isPro = false }: { isPro?: boolean }) {
     );
   }, [isLoaded, userId]);
 
-  async function remove(id: number) {
-    await removeFromWatchlist(id, userId);
-    setWatchlist((list) => list.filter((i) => i.anilistId !== id));
+  async function remove(item: WatchlistItem) {
+    setWatchlist((list) => list.filter((i) => i.anilistId !== item.anilistId));
+    await toggle(item); // persists removal + keeps card hearts in sync
   }
 
   const stats = [
@@ -116,7 +118,7 @@ export function ProfileClient({ isPro = false }: { isPro?: boolean }) {
                     </div>
                   </Link>
                   <button
-                    onClick={() => remove(item.anilistId)}
+                    onClick={() => remove(item)}
                     aria-label="Remove"
                     className="absolute right-2 top-2 rounded-md bg-base/80 p-1.5 text-zinc-300 opacity-0 backdrop-blur transition hover:text-action group-hover:opacity-100"
                   >

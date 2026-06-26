@@ -3,20 +3,27 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Play, Info, Star } from 'lucide-react';
+import { Play, Info, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AnilistMedia } from '@/lib/anilist/types';
 import { bestTitle, formatFormat, formatScore, stripHtml, truncate } from '@/lib/utils';
 
 export function Hero({ items }: { items: AnilistMedia[] }) {
   const slides = items.slice(0, 5);
   const [active, setActive] = useState(0);
+  // Bumped whenever the user navigates manually, to reset the auto-advance timer.
+  const [nudge, setNudge] = useState(0);
 
-  // Auto-advance every 7s.
+  const go = (dir: 1 | -1) => {
+    setActive((a) => (a + dir + slides.length) % slides.length);
+    setNudge((n) => n + 1);
+  };
+
+  // Auto-advance every 7s (restarts after a manual nav so it doesn't jump).
   useEffect(() => {
     if (slides.length <= 1) return;
     const id = setInterval(() => setActive((a) => (a + 1) % slides.length), 7000);
     return () => clearInterval(id);
-  }, [slides.length]);
+  }, [slides.length, nudge]);
 
   if (slides.length === 0) return null;
   const media = slides[active];
@@ -43,6 +50,26 @@ export function Hero({ items }: { items: AnilistMedia[] }) {
       <div className="absolute inset-0 bg-gradient-to-t from-base via-base/70 to-base/20" />
       <div className="absolute inset-0 bg-gradient-to-r from-base via-base/60 to-transparent" />
       <div className="grain pointer-events-none absolute inset-0" />
+
+      {/* Carousel arrows */}
+      {slides.length > 1 && (
+        <>
+          <button
+            onClick={() => go(-1)}
+            aria-label="Previous"
+            className="absolute left-2 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-base/50 text-white backdrop-blur transition hover:border-primary/60 hover:bg-base/80 hover:shadow-glow sm:left-4 sm:h-12 sm:w-12"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            onClick={() => go(1)}
+            aria-label="Next"
+            className="absolute right-2 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-base/50 text-white backdrop-blur transition hover:border-primary/60 hover:bg-base/80 hover:shadow-glow sm:right-4 sm:h-12 sm:w-12"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </>
+      )}
 
       {/* Decorative katakana */}
       <div className="pointer-events-none absolute right-6 top-24 hidden flex-col items-end gap-2 lg:flex">

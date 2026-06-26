@@ -11,6 +11,7 @@ import { AnimeCard } from '@/components/ui/anime-card';
 import { SectionHeader } from '@/components/ui/section-header';
 import { WatchlistButton } from '@/components/anime/watchlist-button';
 import { EpisodeList } from '@/components/anime/episode-list';
+import { Countdown } from '@/components/ui/countdown';
 
 export const revalidate = 1800;
 
@@ -154,6 +155,17 @@ export default async function AnimeDetailPage({ params }: Props) {
                 </span>
               )}
             </div>
+
+            {/* Next-episode countdown */}
+            {media.nextAiringEpisode && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2">
+                <span className="katakana text-[8px]">放送まで</span>
+                <Countdown
+                  airingAt={media.nextAiringEpisode.airingAt}
+                  episode={media.nextAiringEpisode.episode}
+                />
+              </div>
+            )}
 
             {/* Genres */}
             <div className="mt-4 flex flex-wrap gap-2">

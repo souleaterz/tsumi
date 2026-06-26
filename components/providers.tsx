@@ -3,6 +3,7 @@
 import { ClerkProvider } from '@clerk/nextjs';
 import { dark } from '@clerk/themes';
 import type { ReactNode } from 'react';
+import { WatchlistProvider } from './watchlist-provider';
 
 const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
@@ -29,7 +30,11 @@ export const clerkAppearance = {
  * before auth is wired up, then activates real auth once keys land in env.
  */
 export function Providers({ children }: { children: ReactNode }) {
-  if (!hasClerk) return <>{children}</>;
+  if (!hasClerk) return <WatchlistProvider>{children}</WatchlistProvider>;
 
-  return <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>;
+  return (
+    <ClerkProvider appearance={clerkAppearance}>
+      <WatchlistProvider>{children}</WatchlistProvider>
+    </ClerkProvider>
+  );
 }
