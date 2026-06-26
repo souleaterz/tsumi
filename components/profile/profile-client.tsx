@@ -21,7 +21,7 @@ export function ProfileClient({ isPro = false }: { isPro?: boolean }) {
 
   useEffect(() => {
     if (!isLoaded) return;
-    Promise.all([getWatchlist(userId), getContinueWatching(userId, 24)]).then(
+    Promise.all([getWatchlist(userId), getContinueWatching(userId, 24, true)]).then(
       ([w, h]) => {
         setWatchlist(w);
         setHistory(h);

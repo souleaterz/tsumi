@@ -1,6 +1,7 @@
 'use client';
 
-import { getSupabaseBrowser } from '@/lib/supabase/client';
+// Signed-in users persist via server API routes (service-role, bypasses RLS);
+// signed-out users fall back to localStorage. `userId` truthiness is the signal.
 
 export interface WatchlistItem {
   anilistId: number;
@@ -27,20 +28,14 @@ function writeLocal(items: WatchlistItem[]) {
 }
 
 export async function getWatchlist(userId?: string | null): Promise<WatchlistItem[]> {
-  const supabase = getSupabaseBrowser();
-  if (supabase && userId) {
-    const { data } = await supabase
-      .from('watchlist')
-      .select('*')
-      .eq('user_id', userId)
-      .order('added_at', { ascending: false });
-    return (data || []).map((r) => ({
-      anilistId: r.anilist_id,
-      title: r.title,
-      coverImage: r.cover_image,
-      format: r.format,
-      addedAt: new Date(r.added_at).getTime(),
-    }));
+  if (userId) {
+    try {
+      const res = await fetch('/api/watchlist');
+      if (res.ok) return ((await res.json()).items ?? []) as WatchlistItem[];
+    } catch {
+      /* network error — fall through to empty */
+    }
+    return [];
   }
   return readLocal().sort((a, b) => b.addedAt - a.addedAt);
 }
@@ -54,18 +49,12 @@ export async function isInWatchlist(
 }
 
 export async function addToWatchlist(item: WatchlistItem, userId?: string | null) {
-  const supabase = getSupabaseBrowser();
-  if (supabase && userId) {
-    await supabase.from('watchlist').upsert(
-      {
-        user_id: userId,
-        anilist_id: item.anilistId,
-        title: item.title,
-        cover_image: item.coverImage,
-        format: item.format,
-      },
-      { onConflict: 'user_id,anilist_id' },
-    );
+  if (userId) {
+    await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    });
     return;
   }
   const list = readLocal().filter((i) => i.anilistId !== item.anilistId);
@@ -74,13 +63,8 @@ export async function addToWatchlist(item: WatchlistItem, userId?: string | null
 }
 
 export async function removeFromWatchlist(anilistId: number, userId?: string | null) {
-  const supabase = getSupabaseBrowser();
-  if (supabase && userId) {
-    await supabase
-      .from('watchlist')
-      .delete()
-      .eq('user_id', userId)
-      .eq('anilist_id', anilistId);
+  if (userId) {
+    await fetch(`/api/watchlist?anilistId=${anilistId}`, { method: 'DELETE' });
     return;
   }
   writeLocal(readLocal().filter((i) => i.anilistId !== anilistId));

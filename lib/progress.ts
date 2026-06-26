@@ -1,6 +1,7 @@
 'use client';
 
-import { getSupabaseBrowser } from '@/lib/supabase/client';
+// Signed-in users persist via server API routes (service-role, bypasses RLS);
+// signed-out users fall back to localStorage. `userId` truthiness is the signal.
 
 export interface ProgressEntry {
   anilistId: number;
@@ -33,24 +34,13 @@ function writeLocal(entries: ProgressEntry[]) {
 
 /** Save (upsert) progress for a single episode. */
 export async function saveProgress(entry: ProgressEntry, userId?: string | null) {
-  const supabase = getSupabaseBrowser();
-
-  if (supabase && userId) {
-    await supabase.from('watch_progress').upsert(
-      {
-        user_id: userId,
-        anilist_id: entry.anilistId,
-        episode: entry.episode,
-        title: entry.title,
-        cover_image: entry.coverImage,
-        total_episodes: entry.totalEpisodes,
-        position_sec: entry.positionSec,
-        duration_sec: entry.durationSec,
-        completed: entry.completed,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,anilist_id,episode' },
-    );
+  if (userId) {
+    await fetch('/api/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+      keepalive: true, // let the save land even if the page is unloading
+    });
     return;
   }
 
@@ -66,24 +56,23 @@ export async function saveProgress(entry: ProgressEntry, userId?: string | null)
 export async function getContinueWatching(
   userId?: string | null,
   limit = 12,
+  includeCompleted = false,
 ): Promise<ProgressEntry[]> {
-  const supabase = getSupabaseBrowser();
-
-  if (supabase && userId) {
-    const { data } = await supabase
-      .from('watch_progress')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('completed', false)
-      .order('updated_at', { ascending: false })
-      .limit(limit);
-    return (data || []).map(rowToEntry);
+  if (userId) {
+    try {
+      const all = includeCompleted ? '&all=1' : '';
+      const res = await fetch(`/api/progress?limit=${limit}${all}`);
+      if (res.ok) return ((await res.json()).items ?? []) as ProgressEntry[];
+    } catch {
+      /* network error — fall through to empty */
+    }
+    return [];
   }
 
   // Local fallback — dedupe to latest episode per anime.
   const seen = new Set<number>();
   return readLocal()
-    .filter((e) => !e.completed)
+    .filter((e) => includeCompleted || !e.completed)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .filter((e) => (seen.has(e.anilistId) ? false : seen.add(e.anilistId)))
     .slice(0, limit);
@@ -94,32 +83,16 @@ export async function getEpisodeProgress(
   episode: number,
   userId?: string | null,
 ): Promise<ProgressEntry | null> {
-  const supabase = getSupabaseBrowser();
-  if (supabase && userId) {
-    const { data } = await supabase
-      .from('watch_progress')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('anilist_id', anilistId)
-      .eq('episode', episode)
-      .maybeSingle();
-    return data ? rowToEntry(data) : null;
+  if (userId) {
+    try {
+      const res = await fetch(`/api/progress?anilistId=${anilistId}&episode=${episode}`);
+      if (res.ok) return ((await res.json()).entry ?? null) as ProgressEntry | null;
+    } catch {
+      /* network error */
+    }
+    return null;
   }
   return (
     readLocal().find((e) => e.anilistId === anilistId && e.episode === episode) || null
   );
-}
-
-function rowToEntry(row: any): ProgressEntry {
-  return {
-    anilistId: row.anilist_id,
-    episode: row.episode,
-    title: row.title,
-    coverImage: row.cover_image,
-    totalEpisodes: row.total_episodes,
-    positionSec: row.position_sec,
-    durationSec: row.duration_sec,
-    completed: row.completed,
-    updatedAt: new Date(row.updated_at).getTime(),
-  };
 }

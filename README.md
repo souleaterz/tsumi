@@ -72,11 +72,10 @@ fail gracefully when unset. To fully enable everything:
 1. **Supabase** — create a project, run `lib/supabase/schema.sql`, set the URL + keys.
 2. **Clerk** — set publishable/secret keys; `/profile` becomes protected. The signed-in
    Clerk `userId` is threaded into the data layer (watchlist/history/progress) via the
-   `useUserId()` hook; without keys it falls back to `localStorage`.
-   **For Supabase persistence to authorise per-user rows, enable Clerk as a third-party
-   auth provider in Supabase** (Clerk's native Supabase integration). `SupabaseBridge`
-   then injects the Clerk session token into every Supabase request so RLS matches
-   `auth.jwt()->>'sub'` to `user_id`.
+   `useUserId()` hook; without keys it falls back to `localStorage`. Persistence goes
+   through server-side API routes (`/api/watchlist`, `/api/progress`) using the Supabase
+   **service-role key** with the user resolved from the Clerk session — so no Clerk↔Supabase
+   JWT integration is required.
 3. **Stripe** — set secret key + `STRIPE_PRO_PRICE_ID` (create the £0.99/mo Price in the
    Stripe dashboard — the UI figure is display-only), point a webhook at
    `/api/stripe/webhook` with `STRIPE_WEBHOOK_SECRET`. The webhook mirrors subscription

@@ -72,14 +72,10 @@ Set this env var now so absolute URLs (OG tags, sitemap, Stripe redirects) are c
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | `/sign-in` |
 | `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | `/sign-up` |
 
-4. **Connect Clerk → Supabase (required for per-user persistence).** Without this,
-   Supabase RLS rejects the writes and data silently falls back to `localStorage`.
-   - In **Clerk → Configure → Integrations**, enable the **Supabase** integration
-     (or, on older dashboards, add a JWT template named `supabase`).
-   - In **Supabase → Authentication → Sign In / Providers → Third-Party Auth**, add
-     **Clerk** as a provider and paste your Clerk domain.
-   - The app's `SupabaseBridge` then injects the Clerk session token on every Supabase
-     request, and RLS matches `auth.jwt()->>'sub'` to `user_id`.
+> **No Clerk↔Supabase JWT integration needed.** Watchlist/history/progress are written
+> through server-side API routes using the Supabase **service-role key** (from step 2),
+> with the user resolved from the Clerk session. RLS stays on (it blocks direct client
+> access); the service role bypasses it. Just make sure `SUPABASE_SERVICE_ROLE_KEY` is set.
 
 After redeploy, `/profile` becomes a protected route and the watchlist/history persist
 to Supabase per user.

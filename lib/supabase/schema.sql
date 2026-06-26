@@ -53,5 +53,8 @@ alter table public.watchlist        enable row level security;
 alter table public.watch_progress   enable row level security;
 alter table public.subscriptions    enable row level security;
 
--- NOTE: with Clerk auth, validate the JWT 'sub' claim via a Supabase
--- third-party auth integration, or write through a service-role API route.
+-- NOTE: RLS is enabled with NO policies, so direct client (anon-key) access is
+-- denied. Tsumi reads/writes these tables through server-side API routes
+-- (/api/watchlist, /api/progress) using the service-role key, which bypasses
+-- RLS, with the user resolved from the Clerk session. No Clerk↔Supabase JWT
+-- integration is required.
