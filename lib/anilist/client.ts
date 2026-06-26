@@ -3,10 +3,24 @@ import {
   DETAIL_QUERY,
   GENRES_QUERY,
   POPULAR_QUERY,
+  RECS_QUERY,
   SEARCH_QUERY,
   SEASONAL_QUERY,
+  SUGGEST_QUERY,
+  SUGGEST_BY_IDS_QUERY,
+  TITLE_INDEX_QUERY,
   TRENDING_QUERY,
 } from './queries';
+import { fuzzyMatch, type TitleEntry } from './fuzzy';
+
+export interface SearchSuggestion {
+  id: number;
+  title: { romaji?: string | null; english?: string | null };
+  coverImage?: { medium?: string | null; color?: string | null };
+  format?: string | null;
+  seasonYear?: number | null;
+  averageScore?: number | null;
+}
 
 const ENDPOINT =
   process.env.NEXT_PUBLIC_ANILIST_ENDPOINT || 'https://graphql.anilist.co';
@@ -142,6 +156,89 @@ export async function searchAnime(variables: {
     Page: { pageInfo: PageInfo; media: AnilistMedia[] };
   }>(SEARCH_QUERY, cleaned, 300);
   return { media: data.Page.media, pageInfo: data.Page.pageInfo };
+}
+
+/** Cached index of popular anime titles (~250) for fuzzy typo correction. */
+async function getTitleIndex(): Promise<TitleEntry[]> {
+  const pages = [1, 2, 3, 4, 5];
+  const results = await Promise.all(
+    pages.map((page) =>
+      anilistFetch<{ Page: { media: TitleEntry[] } }>(
+        TITLE_INDEX_QUERY,
+        { page, perPage: 50 },
+        86400,
+      ).then((d) => d.Page.media).catch(() => []),
+    ),
+  );
+  return results.flat();
+}
+
+export async function searchSuggestions(query: string): Promise<SearchSuggestion[]> {
+  if (!query.trim()) return [];
+  try {
+    const data = await anilistFetch<{ Page: { media: SearchSuggestion[] } }>(
+      SUGGEST_QUERY,
+      { search: query, perPage: 8 },
+      300,
+    );
+    if (data.Page.media.length > 0) return data.Page.media;
+
+    // Nothing matched exactly — try fuzzy "did you mean" against popular titles.
+    const index = await getTitleIndex();
+    const ids = fuzzyMatch(query, index);
+    if (ids.length === 0) return [];
+    const byIds = await anilistFetch<{ Page: { media: SearchSuggestion[] } }>(
+      SUGGEST_BY_IDS_QUERY,
+      { ids },
+      300,
+    );
+    // Preserve fuzzy ranking order.
+    const order = new Map(ids.map((id, i) => [id, i]));
+    return byIds.Page.media.sort(
+      (a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Aggregate "because you watched" recommendations from a set of seed anime ids
+ * (the user's history/watchlist). Dedupes, drops the seeds themselves, and
+ * ranks by how often a title is recommended, then score.
+ */
+export async function getRecommendationsFor(
+  ids: number[],
+  limit = 18,
+): Promise<AnilistMedia[]> {
+  const seeds = ids.slice(0, 6);
+  if (seeds.length === 0) return [];
+  try {
+    const data = await anilistFetch<{
+      Page: {
+        media: { recommendations: { nodes: { mediaRecommendation: AnilistMedia | null }[] } }[];
+      };
+    }>(RECS_QUERY, { ids: seeds, perPage: seeds.length }, 600);
+
+    const seedSet = new Set(ids);
+    const scored = new Map<number, { media: AnilistMedia; count: number }>();
+    for (const m of data.Page.media) {
+      for (const node of m.recommendations?.nodes ?? []) {
+        const rec = node.mediaRecommendation;
+        if (!rec || seedSet.has(rec.id)) continue;
+        const existing = scored.get(rec.id);
+        if (existing) existing.count += 1;
+        else scored.set(rec.id, { media: rec, count: 1 });
+      }
+    }
+
+    return Array.from(scored.values())
+      .sort((a, b) => b.count - a.count || (b.media.averageScore ?? 0) - (a.media.averageScore ?? 0))
+      .slice(0, limit)
+      .map((s) => s.media);
+  } catch {
+    return [];
+  }
 }
 
 export async function getGenres(): Promise<string[]> {

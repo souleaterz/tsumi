@@ -117,3 +117,65 @@ export const GENRES_QUERY = `
     GenreCollection
   }
 `;
+
+// Aggregate recommendations for a set of seed anime (the user's history/list).
+export const RECS_QUERY = `
+  query Recs($ids: [Int], $perPage: Int = 6) {
+    Page(page: 1, perPage: $perPage) {
+      media(id_in: $ids, type: ANIME) {
+        id
+        recommendations(sort: RATING_DESC, perPage: 10) {
+          nodes {
+            mediaRecommendation {
+              ${MEDIA_FIELDS}
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// Lightweight query for search-as-you-type suggestions.
+export const SUGGEST_QUERY = `
+  query Suggest($search: String, $perPage: Int = 8) {
+    Page(page: 1, perPage: $perPage) {
+      media(type: ANIME, search: $search, sort: SEARCH_MATCH, isAdult: false) {
+        id
+        title { romaji english }
+        coverImage { medium color }
+        format
+        seasonYear
+        averageScore
+      }
+    }
+  }
+`;
+
+// Same suggestion shape, fetched by id (for "did you mean" typo correction).
+export const SUGGEST_BY_IDS_QUERY = `
+  query SuggestByIds($ids: [Int]) {
+    Page(page: 1, perPage: 12) {
+      media(type: ANIME, id_in: $ids, sort: POPULARITY_DESC) {
+        id
+        title { romaji english }
+        coverImage { medium color }
+        format
+        seasonYear
+        averageScore
+      }
+    }
+  }
+`;
+
+// Minimal title index (popular anime) used for fuzzy typo correction.
+export const TITLE_INDEX_QUERY = `
+  query TitleIndex($page: Int = 1, $perPage: Int = 50) {
+    Page(page: $page, perPage: $perPage) {
+      media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+        id
+        title { romaji english }
+      }
+    }
+  }
+`;

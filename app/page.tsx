@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getPopular, getSeasonal, getTrending, currentSeason } from '@/lib/anilist/client';
 import { Hero } from '@/components/home/hero';
 import { ContinueWatching } from '@/components/home/continue-watching';
+import { Recommended } from '@/components/home/recommended';
 import { CardRow } from '@/components/ui/card-row';
 import { AnimeCard } from '@/components/ui/anime-card';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -48,6 +49,9 @@ export default async function HomePage() {
 
       {/* CONTINUE WATCHING (client; hidden when empty) */}
       <ContinueWatching />
+
+      {/* RECOMMENDED FROM HISTORY (client; hidden until there's signal) */}
+      <Recommended />
 
       {/* TRENDING */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">

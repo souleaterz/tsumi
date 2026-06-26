@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { Search, Menu, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ClerkAuthButtons } from './auth-buttons';
+import { SearchAutocomplete } from './search-autocomplete';
 
 const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
@@ -17,16 +18,7 @@ const NAV_LINKS = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-
-  function onSearch(e: FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
-    router.push(`/browse?search=${encodeURIComponent(query.trim())}`);
-    setOpen(false);
-  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 bg-base/70 backdrop-blur-xl">
@@ -70,15 +62,7 @@ export function Navbar() {
         <div className="flex-1" />
 
         {/* Search */}
-        <form onSubmit={onSearch} className="relative hidden sm:block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search anime…"
-            className="w-44 rounded-md border border-white/10 bg-surface/60 py-2 pl-9 pr-3 text-sm text-zinc-200 outline-none transition focus:w-60 focus:border-primary/60 focus:shadow-glow"
-          />
-        </form>
+        <SearchAutocomplete className="hidden w-56 sm:block" />
 
         {/* Auth */}
         <div className="hidden items-center gap-3 md:flex">
@@ -107,15 +91,7 @@ export function Navbar() {
       {/* Mobile menu */}
       {open && (
         <div className="border-t border-white/5 bg-base/95 px-4 py-4 md:hidden">
-          <form onSubmit={onSearch} className="relative mb-4">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search anime…"
-              className="w-full rounded-md border border-white/10 bg-surface/60 py-2 pl-9 pr-3 text-sm text-zinc-200 outline-none focus:border-primary/60"
-            />
-          </form>
+          <SearchAutocomplete className="mb-4" />
           <div className="flex flex-col gap-1">
             {NAV_LINKS.map((link) => (
               <Link
