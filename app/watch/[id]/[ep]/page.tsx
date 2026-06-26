@@ -28,7 +28,8 @@ export default async function WatchPage({ params, searchParams }: Props) {
   const ep = Number(params.ep);
   if (!Number.isFinite(id) || !Number.isFinite(ep) || ep < 1) notFound();
 
-  const audioPref = searchParams.audio === 'dub' ? 'dub' : 'sub';
+  // Default to Dub unless the viewer explicitly chose Sub.
+  const wantDub = searchParams.audio !== 'sub';
 
   const userId = await currentUserId();
   const [media, epMeta, isPro] = await Promise.all([
@@ -39,13 +40,13 @@ export default async function WatchPage({ params, searchParams }: Props) {
   if (!media) notFound();
 
   const title = bestTitle(media.title);
+  const romaji = media.title.romaji || media.title.english || undefined;
   // Romaji title gives the Nyaa fallback the best chance of matching releases.
-  const resolved = await resolveStreams(
-    id,
-    ep,
-    media.title.romaji || media.title.english || undefined,
-    audioPref === 'dub',
-  );
+  let resolved = await resolveStreams(id, ep, romaji, wantDub);
+  // If defaulting to dub found nothing (e.g. provider has no dub), fall to sub.
+  if (resolved.length === 0 && wantDub && searchParams.audio !== 'dub') {
+    resolved = await resolveStreams(id, ep, romaji, false);
+  }
 
   // Sanitise for the client: Real-Debrid sources carry a resolver URL with the
   // RD key — strip it and expose a keyless /api/stream-url endpoint instead.
@@ -67,8 +68,11 @@ export default async function WatchPage({ params, searchParams }: Props) {
   // All quality tiers are available to everyone — HD sources are usually the
   // best-seeded / cached ones, so capping free users only hurt performance.
   // With a provider, dub is fetched on demand, so always offer the toggle.
-  // Otherwise, only offer Dub when a dub-capable release was found.
+  // Otherwise, only offer Dub when a dub-capable (dual-audio) release was found.
   const hasDub = isProviderEnabled || sources.some((s) => s.dub);
+  // Effective choice: honour explicit Sub; default to Dub only when available.
+  const audioPref: 'sub' | 'dub' =
+    searchParams.audio === 'sub' || !hasDub ? 'sub' : 'dub';
   const availableSources =
     audioPref === 'dub' && sources.some((s) => s.dub)
       ? sources.filter((s) => s.dub)
@@ -105,10 +109,10 @@ export default async function WatchPage({ params, searchParams }: Props) {
               {title}
               <span className="ml-3 text-accent">EP {ep}</span>
             </h1>
-            {/* Sub / Dub toggle */}
+            {/* Sub / Dub toggle (defaults to Dub) */}
             <div className="flex items-center overflow-hidden rounded-md border border-white/10">
               <Link
-                href={`/watch/${id}/${ep}`}
+                href={`/watch/${id}/${ep}?audio=sub`}
                 scroll={false}
                 className={`px-3 py-1.5 text-sm font-semibold transition ${
                   audioPref === 'sub'
