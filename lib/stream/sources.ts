@@ -172,12 +172,14 @@ function playabilityScore(text: string): number {
   // Audio codec: AAC/MP3 are browser-native; OPUS/FLAC/AC3/DTS need re-encoding.
   if (/\baac\b|\bmp3\b/i.test(text)) s += 20;
   else if (/opus|flac|ac3|eac3|dts|truehd/i.test(text)) s -= 15;
-  // Resolution: 1080p sweet spot; 4K is heavy; lower is light but worse-looking.
+  // Resolution: prefer 720p — the smoothest balance for RD's live transcode.
+  // 1080p is demoted (heavier to transcode/stream) and 4K pushed to the bottom;
+  // both stay selectable in the picker for shows that only have them.
   const q = parseQuality(text);
-  if (q === '1080p') s += 30;
-  else if (q === '720p') s += 22;
-  else if (q === '480p') s += 8;
-  else if (q === '2160p') s += 2;
+  if (q === '720p') s += 45;
+  else if (q === '480p') s += 32;
+  else if (q === '1080p') s += 12;
+  else if (q === '2160p') s -= 40;
   return s;
 }
 
