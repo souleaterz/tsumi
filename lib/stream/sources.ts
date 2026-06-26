@@ -20,7 +20,12 @@ const RD_API_KEY = process.env.REALDEBRID_API_KEY;
 export const isDebridEnabled = Boolean(RD_API_KEY);
 
 export interface EpisodeMeta {
+  /** Entry-local episode number — what Torrentio/Kitsu streams key off. */
   episode: number;
+  /** TVDB season number (via Anizip), for grouping into real seasons. */
+  seasonNumber?: number;
+  /** In-season episode number (resets each season), for display. */
+  episodeNumber?: number;
   title?: string;
   image?: string;
   overview?: string;
@@ -104,6 +109,10 @@ export async function getEpisodeMeta(anilistId: number): Promise<EpisodeMeta[]> 
         const e = ep as Record<string, unknown>;
         return {
           episode: Number(num),
+          seasonNumber:
+            typeof e.seasonNumber === 'number' ? e.seasonNumber : undefined,
+          episodeNumber:
+            typeof e.episodeNumber === 'number' ? e.episodeNumber : undefined,
           title:
             (e.title as Record<string, string>)?.en ||
             (e.title as Record<string, string>)?.['x-jat'],
@@ -134,11 +143,15 @@ export async function getMalId(anilistId: number): Promise<number | null> {
 }
 
 /**
- * Rank sources: Real-Debrid cached torrents first (instant playback), then
- * higher quality, then more seeders.
+ * Rank sources for the best *fast* experience:
+ *   1. Real-Debrid cached torrents first (instant — no waiting for RD download).
+ *   2. 1080p preferred over everything (4K is huge/slow to transcode; 720p lower).
+ *   3. Most seeders (faster to fetch/cache).
+ * So the default selected source is the cached 1080p with the most seeds.
  */
 function rankSources(streams: StreamSource[]): StreamSource[] {
-  const qRank: Record<string, number> = { '2160p': 4, '1080p': 3, '720p': 2, '480p': 1 };
+  // 1080p is the sweet spot; 4K is demoted below 1080p/720p for speed.
+  const qRank: Record<string, number> = { '1080p': 4, '720p': 3, '2160p': 2, '480p': 1 };
   return [...streams].sort((a, b) => {
     if (a.cached !== b.cached) return a.cached ? -1 : 1;
     const q = (qRank[b.quality ?? ''] ?? 0) - (qRank[a.quality ?? ''] ?? 0);
