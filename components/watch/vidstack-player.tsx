@@ -26,6 +26,8 @@ interface PlayerProps {
   sources: StreamSource[];
   startAt?: number;
   userId?: string | null;
+  /** When true, auto-select the English audio track if the stream has one. */
+  preferDub?: boolean;
 }
 
 const VIDEO_EXT = /\.(mp4|webm|mkv|m4v|mov|avi)$/i;
@@ -39,6 +41,7 @@ export function VidstackPlayer({
   sources,
   startAt = 0,
   userId = null,
+  preferDub = false,
 }: PlayerProps) {
   const playerRef = useRef<MediaPlayerInstance>(null);
   const clientRef = useRef<any>(null);
@@ -215,12 +218,37 @@ export function VidstackPlayer({
     return () => clearInterval(id);
   }, [status, anilistId, episode, title, coverImage, totalEpisodes, userId]);
 
-  // Resume from saved position once playback is ready.
+  // Pick the Japanese or English audio track based on the Sub/Dub choice —
+  // works when the (RD-transcoded) stream actually carries both tracks.
+  const selectPreferredAudio = useCallback(() => {
+    const p = playerRef.current;
+    const tracks = p?.audioTracks as unknown as
+      | { length: number; [i: number]: { label?: string; language?: string; selected: boolean } }
+      | undefined;
+    if (!tracks || tracks.length < 2) return;
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      const s = `${t.label ?? ''} ${t.language ?? ''}`.toLowerCase();
+      const isEng = /\b(en|eng|english)\b/.test(s);
+      const isJpn = /\b(ja|jp|jpn|japanese)\b/.test(s);
+      if (preferDub ? isEng : isJpn) {
+        try {
+          t.selected = true;
+        } catch {
+          /* track not selectable */
+        }
+        return;
+      }
+    }
+  }, [preferDub]);
+
+  // Resume from saved position + apply audio preference once ready.
   const onCanPlay = useCallback(() => {
     if (startAt > 0 && playerRef.current) {
       playerRef.current.currentTime = startAt;
     }
-  }, [startAt]);
+    selectPreferredAudio();
+  }, [startAt, selectPreferredAudio]);
 
   // Direct (Real-Debrid / provider HLS) playback vs WebTorrent P2P.
   const active = sources[sourceIdx];
@@ -238,6 +266,7 @@ export function VidstackPlayer({
           autoPlay
           playsInline
           onCanPlay={onCanPlay}
+          onAudioTracksChange={selectPreferredAudio}
           onError={() => {
             // If an HLS transcode failed (e.g. CORS) but we have a progressive
             // MP4 fallback, switch to it before giving up on this source.

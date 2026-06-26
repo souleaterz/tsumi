@@ -93,6 +93,7 @@ export default async function WatchPage({ params, searchParams }: Props) {
         totalEpisodes={totalEpisodes}
         sources={availableSources}
         isPro={isPro}
+        preferDub={audioPref === 'dub'}
       />
 
       {/* Title + nav */}

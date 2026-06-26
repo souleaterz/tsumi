@@ -339,9 +339,9 @@ async function resolveProvider(
  * Resolve stream sources for an anime episode.
  *
  * When a streaming provider is configured (`CONSUMET_API_URL`) it's tried first
- * — it has native sub AND dub HLS. Otherwise (or for sub when the provider has
- * nothing) it falls back to Torrentio/Real-Debrid, then Nyaa. `dub` only ever
- * resolves from the provider; if none exists, returns empty.
+ * — it has native sub AND dub HLS. Otherwise it falls back to Torrentio/Real-
+ * Debrid, then Nyaa. For dub without a provider, dual-audio releases are returned
+ * and the player selects the English audio track (`preferDub`).
  */
 export async function resolveStreams(
   anilistId: number,
@@ -353,11 +353,10 @@ export async function resolveStreams(
     if (isProviderEnabled) {
       const provider = await resolveProvider(anilistId, episode, dub);
       if (provider.length > 0) return provider;
-      if (dub) return []; // dub only comes from the provider
-    } else if (dub) {
-      return []; // no provider → no real dub support
+      if (dub) return []; // when a provider is configured, dub comes from it
     }
-
+    // RD / Torrent path: serves sub, and dub via dual-audio releases whose
+    // English track the player selects (see preferDub / selectPreferredAudio).
     const torrentio = await resolveTorrentio(anilistId, episode);
     if (torrentio.length > 0) return rankSources(torrentio);
 

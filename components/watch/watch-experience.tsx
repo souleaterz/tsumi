@@ -15,6 +15,7 @@ interface Props {
   totalEpisodes?: number;
   sources: StreamSource[];
   isPro?: boolean;
+  preferDub?: boolean;
 }
 
 /**
