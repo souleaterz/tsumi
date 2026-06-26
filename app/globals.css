@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-bebas: 'Bebas Neue';
+    --font-inter: 'Inter';
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-base text-zinc-200 font-body antialiased;
+    background-image:
+      radial-gradient(circle at 15% -10%, rgba(124, 58, 237, 0.16), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.1), transparent 40%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-primary/40 text-white;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0a0a0f;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2a2a3d;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #7c3aed;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-heading tracking-wide;
+  }
+}
+
+@layer components {
+  /* Glassmorphism card surface */
+  .glass {
+    @apply bg-surface/60 backdrop-blur-md border border-white/5;
+  }
+
+  /* Katakana accent label */
+  .katakana {
+    @apply font-jp text-accent/40 tracking-[0.3em] uppercase select-none;
+  }
+
+  /* Grain texture overlay */
+  .grain::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 bg-grain opacity-[0.035] mix-blend-overlay;
+  }
+
+  /* Anime card hover-glow wrapper */
+  .card-glow {
+    @apply transition-all duration-300 ease-out;
+  }
+  .card-glow:hover {
+    @apply -translate-y-1 shadow-glow-lg;
+  }
+
+  /* Action button */
+  .btn-cta {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-action px-6 py-3
+           font-semibold text-white transition-all duration-200
+           hover:brightness-110 hover:shadow-[0_0_24px_rgba(220,38,38,0.5)]
+           active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-white/10
+           bg-white/5 px-6 py-3 font-semibold text-zinc-100 backdrop-blur
+           transition-all duration-200 hover:border-primary/60 hover:bg-primary/10;
+  }
+}
+
+@layer utilities {
+  /* Diagonal angular section clip */
+  .clip-diagonal {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 48px), 0 100%);
+  }
+  .clip-diagonal-rev {
+    clip-path: polygon(0 48px, 100% 0, 100% 100%, 0 100%);
+  }
+
+  /* Hide horizontal scrollbar for carousels but keep scroll */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 24px rgba(167, 139, 250, 0.55);
+  }
+}
