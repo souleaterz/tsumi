@@ -43,7 +43,10 @@ export function VidstackPlayer({
   const clientRef = useRef<any>(null);
 
   const [sourceIdx, setSourceIdx] = useState(0);
-  const [src, setSrc] = useState<string | null>(null);
+  // string = direct file; object = explicit HLS source (engages hls.js).
+  const [src, setSrc] = useState<
+    string | { src: string; type: 'application/x-mpegurl' } | null
+  >(null);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'ready' | 'error'>(
     sources.length ? 'connecting' : 'error',
   );
@@ -51,6 +54,8 @@ export function VidstackPlayer({
   const [downloadPct, setDownloadPct] = useState(0);
   const [peers, setPeers] = useState(0);
   const [speed, setSpeed] = useState(0);
+  // Progressive-MP4 URL to fall back to if an HLS transcode fails (CORS, etc.).
+  const mp4FallbackRef = useRef<string | null>(null);
 
   // ── Resolve the magnet → streamURL via the service-worker server ──
   useEffect(() => {
@@ -60,11 +65,33 @@ export function VidstackPlayer({
     setStatus('connecting');
     setSrc(null);
     setDownloadPct(0);
+    mp4FallbackRef.current = null;
 
-    // ── Real-Debrid: a directly-playable HTTPS URL. No WebTorrent needed. ──
+    // ── Real-Debrid: resolve a browser-playable stream. No WebTorrent needed. ──
     if (source.playUrl) {
-      setSrc(source.playUrl);
-      setStatus('ready');
+      (async () => {
+        try {
+          const res = await fetch(source.playUrl!);
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || 'Could not resolve this stream.');
+          }
+          const data: { url: string; hls: boolean; mp4Fallback?: string } =
+            await res.json();
+          if (destroyed) return;
+          mp4FallbackRef.current = data.mp4Fallback ?? null;
+          setSrc(
+            data.hls ? { src: data.url, type: 'application/x-mpegurl' } : data.url,
+          );
+          setStatus('ready');
+        } catch (err) {
+          if (destroyed) return;
+          setStatus('error');
+          setErrorMsg(
+            err instanceof Error ? err.message : 'Could not resolve this stream.',
+          );
+        }
+      })();
       return () => {
         destroyed = true;
       };
@@ -197,6 +224,14 @@ export function VidstackPlayer({
           playsInline
           onCanPlay={onCanPlay}
           onError={() => {
+            // If an HLS transcode failed (e.g. CORS) but we have a progressive
+            // MP4 fallback, switch to it before giving up on this source.
+            if (mp4FallbackRef.current) {
+              const mp4 = mp4FallbackRef.current;
+              mp4FallbackRef.current = null;
+              setSrc(mp4);
+              return;
+            }
             setStatus('error');
             setErrorMsg('This source could not be played in your browser.');
           }}

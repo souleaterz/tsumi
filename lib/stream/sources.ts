@@ -298,6 +298,20 @@ export async function resolveStreams(
   }
 }
 
+const RD_BASE = 'https://api.real-debrid.com/rest/1.0';
+
+// Containers browsers can decode natively — play these directly, no transcode.
+const BROWSER_CONTAINER = /\.(mp4|m4v|webm|mov)(\?|$)/i;
+
+export interface PlayableStream {
+  /** The URL to play. */
+  url: string;
+  /** True when `url` is an HLS (.m3u8) playlist needing hls.js. */
+  hls: boolean;
+  /** Progressive-MP4 transcode to fall back to if HLS fails (e.g. CORS). */
+  mp4Fallback?: string;
+}
+
 /**
  * Resolve a single source's final, directly-playable stream URL by following
  * the Torrentio Real-Debrid resolver redirect SERVER-SIDE. Returns a keyless
@@ -314,5 +328,54 @@ export async function resolveFinalUrl(resolverUrl: string): Promise<string | nul
     return null;
   } catch {
     return null;
+  }
+}
+
+/** Recursively find the first string value in `obj` matching `re`. */
+function deepFindUrl(obj: unknown, re: RegExp): string | null {
+  if (typeof obj === 'string') return re.test(obj) ? obj : null;
+  if (obj && typeof obj === 'object') {
+    for (const v of Object.values(obj)) {
+      const r = deepFindUrl(v, re);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+/**
+ * Turn a Torrentio Real-Debrid resolver URL into something the browser can
+ * actually play. `.mp4`/`.webm` files stream directly; `.mkv` and other
+ * non-browser containers are transcoded by Real-Debrid to HLS (with a
+ * progressive-MP4 fallback) so they play without WebTorrent.
+ */
+export async function resolvePlayable(
+  resolverUrl: string,
+): Promise<PlayableStream | null> {
+  const finalUrl = await resolveFinalUrl(resolverUrl);
+  if (!finalUrl) return null;
+
+  // Already a browser-playable container — stream it as-is.
+  if (BROWSER_CONTAINER.test(finalUrl)) return { url: finalUrl, hls: false };
+
+  // Otherwise ask Real-Debrid to transcode it. The download id is the `/d/<id>/`
+  // segment of the unrestricted link.
+  const id = finalUrl.match(/\/d\/([^/]+)/)?.[1];
+  if (!RD_API_KEY || !id) return { url: finalUrl, hls: false };
+
+  try {
+    const res = await fetch(`${RD_BASE}/streaming/transcode/${id}`, {
+      headers: { Authorization: `Bearer ${RD_API_KEY}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) return { url: finalUrl, hls: false };
+    const t = await res.json();
+    const hls = deepFindUrl(t?.apple, /\.m3u8/i);
+    const mp4 = deepFindUrl(t?.liveMP4, /^https?:/i);
+    if (hls) return { url: hls, hls: true, mp4Fallback: mp4 ?? undefined };
+    if (mp4) return { url: mp4, hls: false };
+    return { url: finalUrl, hls: false };
+  } catch {
+    return { url: finalUrl, hls: false };
   }
 }
