@@ -7,7 +7,9 @@ import {
   MediaPlayer,
   MediaProvider,
   Track,
+  isHLSProvider,
   type MediaPlayerInstance,
+  type MediaProviderAdapter,
 } from '@vidstack/react';
 import {
   defaultLayoutIcons,
@@ -242,6 +244,21 @@ export function VidstackPlayer({
     }
   }, [preferDub]);
 
+  // Buffer further ahead so transcoded HLS stutters less and seeks recover faster.
+  const onProviderChange = useCallback((provider: MediaProviderAdapter | null) => {
+    if (isHLSProvider(provider)) {
+      provider.config = {
+        maxBufferLength: 60,
+        maxMaxBufferLength: 180,
+        backBufferLength: 30,
+        maxFragLookUpTolerance: 0.5,
+        fragLoadingMaxRetry: 6,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
+      };
+    }
+  }, []);
+
   // Resume from saved position + apply audio preference once ready.
   const onCanPlay = useCallback(() => {
     if (startAt > 0 && playerRef.current) {
@@ -265,6 +282,7 @@ export function VidstackPlayer({
           poster={coverImage}
           autoPlay
           playsInline
+          onProviderChange={onProviderChange}
           onCanPlay={onCanPlay}
           onAudioTracksChange={selectPreferredAudio}
           onError={() => {

@@ -61,6 +61,8 @@ export interface StreamSource {
   hlsUrl?: string;
   /** Subtitle tracks (provider sources). */
   subtitles?: { url: string; lang: string }[];
+  /** How smoothly the browser can play it (codec/container score). */
+  playability?: number;
 }
 
 /** Detect a dub-capable release from its name (dual/multi-audio counts). */
@@ -149,19 +151,47 @@ export async function getMalId(anilistId: number): Promise<number | null> {
 }
 
 /**
- * Rank sources for the best *fast* experience:
- *   1. Real-Debrid cached torrents first (instant — no waiting for RD download).
- *   2. 1080p preferred over everything (4K is huge/slow to transcode; 720p lower).
- *   3. Most seeders (faster to fetch/cache).
- * So the default selected source is the cached 1080p with the most seeds.
+ * How cheaply can the browser play this release? Higher = smoother.
+ *
+ * In a browser everything but .mp4 must be repackaged by Real-Debrid. A file
+ * that's already H.264 + AAC only needs a fast *remux* (container swap); HEVC /
+ * OPUS / 4K force a slow real-time *re-encode* that stutters and breaks seeking.
+ * So we score sources by how little work RD has to do.
+ */
+function playabilityScore(text: string): number {
+  let s = 0;
+  // Video codec dominates — it decides whether the browser can play it at all.
+  // H.264 is universal (remux from mkv / direct from mp4). HEVC: Safari-only.
+  // VVC/H.266: no browser. AV1: Chrome/FF but heavier, no Safari.
+  if (/x264|h\.?264|\bavc\b/i.test(text)) s += 50;
+  else if (/x266|h\.?266|\bvvc\b/i.test(text)) s -= 80;
+  else if (/x265|h\.?265|hevc/i.test(text)) s -= 40;
+  else if (/\bav1\b/i.test(text)) s -= 10;
+  // Container: .mp4/.webm can play directly with no RD transcode at all.
+  if (/\.(mp4|m4v|webm)\b/i.test(text)) s += 60;
+  // Audio codec: AAC/MP3 are browser-native; OPUS/FLAC/AC3/DTS need re-encoding.
+  if (/\baac\b|\bmp3\b/i.test(text)) s += 20;
+  else if (/opus|flac|ac3|eac3|dts|truehd/i.test(text)) s -= 15;
+  // Resolution: 1080p sweet spot; 4K is heavy; lower is light but worse-looking.
+  const q = parseQuality(text);
+  if (q === '1080p') s += 30;
+  else if (q === '720p') s += 22;
+  else if (q === '480p') s += 8;
+  else if (q === '2160p') s += 2;
+  return s;
+}
+
+/**
+ * Rank sources for the smoothest experience:
+ *   1. Real-Debrid cached first (instant — no waiting for RD to download).
+ *   2. Highest playability (mp4 > H.264+AAC remux > HEVC/OPUS re-encode; 1080p).
+ *   3. Most seeders (only a tiebreaker; irrelevant for cached RD files).
  */
 function rankSources(streams: StreamSource[]): StreamSource[] {
-  // 1080p is the sweet spot; 4K is demoted below 1080p/720p for speed.
-  const qRank: Record<string, number> = { '1080p': 4, '720p': 3, '2160p': 2, '480p': 1 };
   return [...streams].sort((a, b) => {
     if (a.cached !== b.cached) return a.cached ? -1 : 1;
-    const q = (qRank[b.quality ?? ''] ?? 0) - (qRank[a.quality ?? ''] ?? 0);
-    if (q !== 0) return q;
+    const p = (b.playability ?? 0) - (a.playability ?? 0);
+    if (p !== 0) return p;
     return (b.seeders ?? 0) - (a.seeders ?? 0);
   });
 }
@@ -197,11 +227,16 @@ async function resolveTorrentio(
   return (data?.streams ?? [])
     .map((s: Record<string, unknown>) => {
       const name = String(s.name ?? '');
-      const fullTitle = `${name} ${s.title ?? ''}`.trim();
+      // The filename carries the codec/container details we score on.
+      const filename = String(
+        (s.behaviorHints as Record<string, unknown>)?.filename ?? '',
+      );
+      const fullTitle = `${name} ${s.title ?? ''} ${filename}`.trim();
       const meta = parseTorrentioMeta(String(s.title ?? ''));
       // Torrentio marks Real-Debrid cached torrents with "RD+"/⚡ in the name.
       const cached = /RD\+|⚡/.test(name);
       const dub = parseDub(fullTitle);
+      const playability = playabilityScore(fullTitle);
 
       if (s.url) {
         // Real-Debrid mode: a directly-resolvable stream URL.
@@ -213,6 +248,7 @@ async function resolveTorrentio(
           size: meta.size,
           cached,
           dub,
+          playability,
           source: 'Real-Debrid',
         } as StreamSource;
       }
@@ -227,6 +263,7 @@ async function resolveTorrentio(
           seeders: meta.seeders,
           size: meta.size,
           dub,
+          playability,
           source: 'Torrentio',
         } as StreamSource;
       }
@@ -295,6 +332,7 @@ export async function resolveNyaa(
         seeders: Number(rssField(item, 'nyaa:seeders')) || undefined,
         size: rssField(item, 'nyaa:size'),
         dub: parseDub(name),
+        playability: playabilityScore(name),
         source: 'Nyaa',
       });
       if (sources.length >= 15) break;
@@ -326,6 +364,8 @@ async function resolveProvider(
       quality: '1080p',
       cached: true,
       dub: stream.dub,
+      playability: 200, // clean adaptive HLS — smoothest option
+
       subtitles: stream.subtitles.map((s) => ({
         url: hlsProxy(s.url, stream.referer),
         lang: s.lang,
