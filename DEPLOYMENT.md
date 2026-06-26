@@ -119,6 +119,27 @@ reads it server-side to skip ads and unlock 1080p+ for Pro users.
 
 ---
 
+## 4b. Real-Debrid — REQUIRED for video playback
+
+In-browser torrent streaming (WebTorrent) **cannot play most public anime torrents** —
+browsers only peer over WebRTC, and those swarms have none. Real-Debrid fixes this:
+Torrentio returns direct HTTPS streams for cached torrents that play natively.
+
+1. Sign up at [real-debrid.com](https://real-debrid.com) (~£3/mo).
+2. Get your API token at **[real-debrid.com/apitoken](https://real-debrid.com/apitoken)**.
+3. Add to Vercel env (**server-only secret** — never exposed to the browser):
+
+| Key | Where |
+| --- | --- |
+| `REALDEBRID_API_KEY` | real-debrid.com/apitoken |
+
+Redeploy. The watch page now resolves cached torrents to HTTPS via Real-Debrid; the
+player streams them directly with no WebTorrent. The app server-side-resolves the final
+RD link and redirects the browser to it, so the key never leaves the server.
+
+> Sources marked ⚡ are RD-cached (instant). Uncached torrents may need RD to download
+> first. The source picker prefers cached + highest quality.
+
 ## 5. (Optional) Pre-roll ads & source endpoints
 
 | Key | Default | Notes |
@@ -166,6 +187,9 @@ STRIPE_SECRET_KEY=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PRO_PRICE_ID=
+
+# Real-Debrid (required for playback)
+REALDEBRID_API_KEY=
 
 # Optional
 NEXT_PUBLIC_IMA_AD_TAG=

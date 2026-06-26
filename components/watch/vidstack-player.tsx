@@ -61,8 +61,20 @@ export function VidstackPlayer({
     setSrc(null);
     setDownloadPct(0);
 
+    // ── Real-Debrid: a directly-playable HTTPS URL. No WebTorrent needed. ──
+    if (source.playUrl) {
+      setSrc(source.playUrl);
+      setStatus('ready');
+      return () => {
+        destroyed = true;
+      };
+    }
+
     (async () => {
       try {
+        if (!source.magnet) {
+          throw new Error('This source has no playable stream.');
+        }
         // 1. Register the WebTorrent service worker (streams files over fetch).
         if (!('serviceWorker' in navigator)) {
           throw new Error('Your browser does not support service workers.');
@@ -171,6 +183,9 @@ export function VidstackPlayer({
     }
   }, [startAt]);
 
+  // Direct (Real-Debrid) playback vs WebTorrent P2P for the active source.
+  const isDirect = Boolean(sources[sourceIdx]?.playUrl);
+
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-black shadow-glow-lg">
       {src && (
@@ -179,7 +194,6 @@ export function VidstackPlayer({
           src={src}
           title={`${title} — Episode ${episode}`}
           poster={coverImage}
-          crossOrigin
           playsInline
           onCanPlay={onCanPlay}
           onError={() => {
@@ -189,10 +203,7 @@ export function VidstackPlayer({
           className="h-full w-full"
         >
           <MediaProvider />
-          <DefaultVideoLayout
-            icons={defaultLayoutIcons}
-            colorScheme="dark"
-          />
+          <DefaultVideoLayout icons={defaultLayoutIcons} colorScheme="dark" />
         </MediaPlayer>
       )}
 
@@ -218,7 +229,9 @@ export function VidstackPlayer({
             <>
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
               <p className="text-sm text-zinc-300">
-                Connecting to peers… {downloadPct > 0 && `${downloadPct}% buffered`}
+                {isDirect
+                  ? 'Loading stream…'
+                  : `Connecting to peers… ${downloadPct > 0 ? `${downloadPct}% buffered` : ''}`}
               </p>
               <p className="katakana text-[10px]">ストリーミング準備中</p>
             </>
@@ -226,12 +239,14 @@ export function VidstackPlayer({
         </div>
       )}
 
-      {/* P2P stats + source selector (top overlay) */}
+      {/* Status + source selector (top overlay) */}
       {status === 'ready' && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
           <span className="flex items-center gap-1.5 rounded-md bg-base/70 px-2 py-1 text-[11px] text-zinc-300 backdrop-blur">
             <Wifi className="h-3 w-3 text-primary" />
-            {peers} peers · {(speed / 1024 / 1024).toFixed(1)} MB/s · {downloadPct}%
+            {isDirect
+              ? 'Real-Debrid · direct stream'
+              : `${peers} peers · ${(speed / 1024 / 1024).toFixed(1)} MB/s · ${downloadPct}%`}
           </span>
           {sources.length > 1 && (
             <select
@@ -240,8 +255,10 @@ export function VidstackPlayer({
               className="pointer-events-auto rounded-md border border-white/10 bg-base/80 px-2 py-1 text-xs text-zinc-200 outline-none backdrop-blur"
             >
               {sources.map((s, i) => (
-                <option key={s.infoHash} value={i}>
-                  {s.quality ? s.quality.toUpperCase() : 'Source'} · {s.seeders ?? 0}🌱
+                <option key={i} value={i}>
+                  {s.quality ? s.quality.toUpperCase() : 'Source'}
+                  {s.cached ? ' ⚡' : ''}
+                  {s.playUrl ? '' : ` · ${s.seeders ?? 0}🌱`}
                 </option>
               ))}
             </select>

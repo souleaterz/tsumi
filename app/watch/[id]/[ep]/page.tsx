@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { ChevronLeft } from 'lucide-react';
 import { getAnimeDetail } from '@/lib/anilist/client';
-import { resolveStreams, getEpisodeMeta } from '@/lib/stream/sources';
+import { resolveStreams, getEpisodeMeta, isDebridEnabled } from '@/lib/stream/sources';
 import { bestTitle } from '@/lib/utils';
 import { getProStatus, currentUserId } from '@/lib/subscription';
 import { WatchExperience } from '@/components/watch/watch-experience';
@@ -39,11 +39,25 @@ export default async function WatchPage({ params }: Props) {
 
   const title = bestTitle(media.title);
   // Romaji title gives the Nyaa fallback the best chance of matching releases.
-  const sources = await resolveStreams(
+  const resolved = await resolveStreams(
     id,
     ep,
     media.title.romaji || media.title.english || undefined,
   );
+
+  // Sanitise for the client: Real-Debrid sources carry a resolver URL with the
+  // RD key — strip it and expose a keyless /api/stream-url endpoint instead.
+  const sources = resolved.map((s) => {
+    const { url, ...safe } = s;
+    if (url) {
+      return {
+        ...safe,
+        playUrl: `/api/stream-url/${id}/${ep}?t=${encodeURIComponent(s.title)}`,
+      };
+    }
+    return safe;
+  });
+
   const cover = media.coverImage?.extraLarge || media.coverImage?.large || undefined;
   const totalEpisodes = media.episodes ?? epMeta.length ?? 1;
   const epInfo = epMeta.find((e) => e.episode === ep);
@@ -115,7 +129,10 @@ export default async function WatchPage({ params }: Props) {
             {availableSources.length} stream source
             {availableSources.length > 1 ? 's' : ''} available
             {isPro && <span className="text-accent"> · Pro · up to 1080p</span>} · resolved
-            via Torrentio, streamed peer-to-peer via WebTorrent.
+            via Torrentio
+            {isDebridEnabled
+              ? ', streamed over HTTPS via Real-Debrid.'
+              : ', streamed peer-to-peer via WebTorrent.'}
           </p>
         )}
       </div>
