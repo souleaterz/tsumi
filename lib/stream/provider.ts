@@ -1,22 +1,41 @@
 import 'server-only';
+import { HiAnime } from 'aniwatch';
 
 // ─────────────────────────────────────────────────────────────
-// Streaming-provider source resolution (Consumet meta/anilist).
+// Streaming-provider source resolution — HiAnime (via aniwatch npm).
 //
-// Unlike Torrentio/Real-Debrid (torrents → transcode), a provider API returns
-// ready-to-play HLS streams with native SUB and DUB variants plus subtitle
-// tracks. Requires a self-hosted Consumet instance (the public ones are dead):
-//   https://github.com/consumet/api.consumet.org  →  set CONSUMET_API_URL.
+// Why this exists: Real-Debrid streams torrents but RD evicts cached files,
+// stutters under live transcoding, and torrent dubs are unreliable. HiAnime
+// hosts pre-transcoded HLS with native English **sub AND dub** plus real
+// English subtitles — exactly what an English-speaking audience expects.
 //
-// Provider HLS often requires a Referer header the browser can't set, so the
-// URLs are routed through our /api/hls proxy.
+// IMPORTANT — fragility:
+//   • The `aniwatch` GitHub repo got DMCA'd; the npm package still installs
+//     but its longevity is uncertain.
+//   • HiAnime's domain/HTML changes break the scraper periodically.
+//   • The whole thing is opt-in (ENABLE_HIANIME=true) and falls back to RD
+//     silently on any failure, so the site keeps working even if HiAnime is
+//     unreachable.
+//
+// Pipeline:
+//   AniList id ─search HiAnime─▶ HiAnime anime id (cached forever per anilistId)
+//              ─getEpisodes──▶  episode id for the requested number
+//              ─getEpisodeSources("sub"|"dub")──▶  HLS m3u8 + English subs
+//   HLS routes through /api/hls (CORS + injects HiAnime's required Referer).
 // ─────────────────────────────────────────────────────────────
 
-const CONSUMET_URL = process.env.CONSUMET_API_URL?.replace(/\/$/, '');
-// gogoanime or zoro (HiAnime). Zoro has the best dub coverage.
-const PROVIDER = process.env.CONSUMET_PROVIDER || 'zoro';
+const ENABLED = process.env.ENABLE_HIANIME === 'true';
+export const isProviderEnabled = ENABLED;
 
-export const isProviderEnabled = Boolean(CONSUMET_URL);
+let scraper: HiAnime.Scraper | null = null;
+function getScraper(): HiAnime.Scraper {
+  if (!scraper) scraper = new HiAnime.Scraper();
+  return scraper;
+}
+
+// AniList id → HiAnime slug. Cached per-process; lookups are expensive
+// (search + getInfo) but the mapping never changes for a given show.
+const anilistToHianime = new Map<number, string | null>();
 
 export interface ProviderSubtitle {
   url: string;
@@ -24,80 +43,93 @@ export interface ProviderSubtitle {
 }
 
 export interface ProviderStream {
-  /** Direct HLS (.m3u8) URL from the provider. */
+  /** HLS .m3u8 URL the player can fetch (through our /api/hls proxy). */
   url: string;
   quality?: string;
-  /** Referer the provider's CDN requires (passed to our HLS proxy). */
+  /** Referer the HiAnime CDN requires (handed to the HLS proxy). */
   referer?: string;
   subtitles: ProviderSubtitle[];
   dub: boolean;
 }
 
-interface ConsumetEpisode {
-  id: string;
-  number: number;
-}
-
-/** Look up the provider episode id for an AniList id + episode number. */
-async function findEpisodeId(
+/** Find HiAnime's anime slug for a given AniList id. */
+async function resolveHianimeSlug(
   anilistId: number,
-  episode: number,
-  dub: boolean,
+  title: string,
 ): Promise<string | null> {
-  const url =
-    `${CONSUMET_URL}/meta/anilist/info/${anilistId}` +
-    `?provider=${PROVIDER}&dub=${dub ? 'true' : 'false'}`;
-  const res = await fetch(url, { next: { revalidate: 3600 } });
-  if (!res.ok) return null;
-  const data = await res.json();
-  const episodes: ConsumetEpisode[] = data?.episodes ?? [];
-  const match = episodes.find((e) => Number(e.number) === episode);
-  return match?.id ?? null;
+  if (anilistToHianime.has(anilistId)) return anilistToHianime.get(anilistId)!;
+  const hianime = getScraper();
+
+  // 1. Search HiAnime by title. Search results don't include anilistId, so we
+  //    have to verify candidates via getInfo until one matches.
+  try {
+    const searchRes = await hianime.search(title, 1);
+    const candidates = (searchRes.animes ?? []).filter((a) => a.id).slice(0, 5);
+
+    for (const cand of candidates) {
+      if (!cand.id) continue;
+      try {
+        const info = await hianime.getInfo(cand.id);
+        if (info?.anime?.info?.anilistId === anilistId) {
+          anilistToHianime.set(anilistId, cand.id);
+          return cand.id;
+        }
+      } catch {
+        /* try next candidate */
+      }
+    }
+  } catch {
+    /* search failed entirely — HiAnime may be down */
+  }
+  anilistToHianime.set(anilistId, null);
+  return null;
 }
 
-/**
- * Resolve a playable HLS stream (+ subtitles) for an anime episode from the
- * provider. `dub` selects the English-dub variant. Returns null if unavailable
- * (e.g. no dub exists), so the caller can fall back to Real-Debrid.
- */
+/** Fetch a playable HLS stream + English subtitles for an episode. */
 export async function getProviderStream(
   anilistId: number,
   episode: number,
   dub: boolean,
+  titleHint?: string,
 ): Promise<ProviderStream | null> {
-  if (!CONSUMET_URL) return null;
+  if (!ENABLED) return null;
+  if (!titleHint) return null;
+
+  const hianime = getScraper();
+  const slug = await resolveHianimeSlug(anilistId, titleHint);
+  if (!slug) return null;
+
   try {
-    const episodeId = await findEpisodeId(anilistId, episode, dub);
-    if (!episodeId) return null;
+    // 2. Episode list → find the requested episode number.
+    const eps = await hianime.getEpisodes(slug);
+    const epMatch = eps.episodes?.find((e) => e?.number === episode);
+    if (!epMatch?.episodeId) return null;
 
-    const watchUrl =
-      `${CONSUMET_URL}/meta/anilist/watch/${encodeURIComponent(episodeId)}` +
-      `?provider=${PROVIDER}`;
-    const res = await fetch(watchUrl, { next: { revalidate: 900 } });
-    if (!res.ok) return null;
-    const data = await res.json();
+    // 3. Sources for sub OR dub. `hd-1` is HiAnime's default high-quality server.
+    const src = await hianime.getEpisodeSources(
+      epMatch.episodeId,
+      'hd-1',
+      dub ? 'dub' : 'sub',
+    );
 
-    // Prefer an explicit auto/multi-quality m3u8; else the first HLS source.
-    const sources: { url: string; quality?: string; isM3U8?: boolean }[] =
-      data?.sources ?? [];
-    const hls =
-      sources.find((s) => s.quality === 'auto' || s.quality === 'default') ??
-      sources.find((s) => s.isM3U8) ??
-      sources[0];
-    if (!hls?.url) return null;
+    const m3u8 =
+      src.sources?.find((s) => s.isM3U8) ?? src.sources?.[0];
+    if (!m3u8?.url) return null;
 
-    const subtitles: ProviderSubtitle[] = (data?.subtitles ?? [])
-      .filter((s: { url?: string; lang?: string }) => s.url && s.lang)
-      .map((s: { url: string; lang: string }) => ({ url: s.url, lang: s.lang }));
+    // Keep only English-language subtitle tracks (this is an English-first app).
+    const subs: ProviderSubtitle[] = (src.subtitles ?? [])
+      .filter((s) => s?.url && /english|^en\b/i.test(s.lang ?? ''))
+      .map((s) => ({ url: s.url, lang: s.lang || 'English' }));
 
     return {
-      url: hls.url,
-      quality: hls.quality,
-      referer: data?.headers?.Referer ?? data?.headers?.referer,
-      subtitles,
+      url: m3u8.url,
+      quality: m3u8.quality,
+      referer: src.headers?.Referer ?? src.headers?.referer,
+      subtitles: subs,
       dub,
     };
   } catch {
+    // Scraper broke, or HiAnime returned an error — fall back silently.
     return null;
   }
 }

@@ -351,28 +351,30 @@ function hlsProxy(url: string, referer?: string): string {
   return `/api/hls?url=${encodeURIComponent(url)}${ref}`;
 }
 
-/** Build a StreamSource from a streaming-provider (Consumet) result. */
+/** Build a StreamSource from a streaming-provider (HiAnime) result. */
 async function resolveProvider(
   anilistId: number,
   episode: number,
   dub: boolean,
+  titleHint?: string,
 ): Promise<StreamSource[]> {
-  const stream = await getProviderStream(anilistId, episode, dub);
+  const stream = await getProviderStream(anilistId, episode, dub, titleHint);
   if (!stream) return [];
   return [
     {
-      title: `${dub ? 'Dub' : 'Sub'} · HD`,
+      title: `${dub ? 'English Dub' : 'English Sub'} · HD`,
       hlsUrl: hlsProxy(stream.url, stream.referer),
       quality: '1080p',
       cached: true,
       dub: stream.dub,
       playability: 200, // clean adaptive HLS — smoothest option
-
+      // Subtitles are plain VTT files — CORS-proxy via /api/sub (also handles
+      // SRT→VTT conversion, though HiAnime usually serves VTT directly).
       subtitles: stream.subtitles.map((s) => ({
-        url: hlsProxy(s.url, stream.referer),
+        url: `/api/sub?url=${encodeURIComponent(s.url)}`,
         lang: s.lang,
       })),
-      source: 'Provider',
+      source: 'HiAnime',
     },
   ];
 }
@@ -380,10 +382,12 @@ async function resolveProvider(
 /**
  * Resolve stream sources for an anime episode.
  *
- * When a streaming provider is configured (`CONSUMET_API_URL`) it's tried first
- * — it has native sub AND dub HLS. Otherwise it falls back to Torrentio/Real-
- * Debrid, then Nyaa. For dub without a provider, dual-audio releases are returned
- * and the player selects the English audio track (`preferDub`).
+ * When the HiAnime provider is enabled (`ENABLE_HIANIME=true`) it's tried
+ * first — it serves pre-transcoded HLS with native English sub AND dub, plus
+ * proper English subtitles. Real-Debrid is the silent fallback so the site
+ * keeps working even if HiAnime is down or its scraper has broken. For dub
+ * without a provider, dual-audio torrent releases are returned and the player
+ * selects the English audio track (`preferDub`).
  */
 export async function resolveStreams(
   anilistId: number,
@@ -393,9 +397,9 @@ export async function resolveStreams(
 ): Promise<StreamSource[]> {
   try {
     if (isProviderEnabled) {
-      const provider = await resolveProvider(anilistId, episode, dub);
+      const provider = await resolveProvider(anilistId, episode, dub, title);
       if (provider.length > 0) return provider;
-      if (dub) return []; // when a provider is configured, dub comes from it
+      // Provider failed (network/scraper/no match) — fall through to RD.
     }
     // RD / Torrent path: serves sub, and dub via dual-audio releases whose
     // English track the player selects (see preferDub / selectPreferredAudio).

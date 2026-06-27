@@ -136,29 +136,34 @@ RD link and redirects the browser to it, so the key never leaves the server.
 > Sources marked ⚡ are RD-cached (instant). Uncached torrents may need RD to download
 > first. The source picker prefers cached + highest quality.
 
-## 4c. (Optional) Streaming provider — native Sub + Dub
+## 4c. (Optional, experimental) HiAnime streaming provider — native Sub + Dub
 
-Real-Debrid streams Japanese-audio torrents (Sub). For reliable **English Dub** (and to
-avoid mkv transcoding entirely), configure a streaming provider — it returns ready-to-play
-HLS with native sub/dub. When set, it's the **primary** source and Real-Debrid becomes the
-fallback.
+Real-Debrid streams Japanese-audio torrents that must be live-transcoded for the browser,
+which stutters and frequently fails ("could not be played", "removed from RD"). For an
+English-first experience, enable the HiAnime provider — Tsumi embeds the `aniwatch` npm
+scraper directly in its API routes and returns pre-transcoded HLS with native **English
+Sub AND Dub** plus real English subtitles. No mkv transcoding, no eviction errors.
 
-1. **Self-host a Consumet instance** (the public ones are taken down):
-   - Clone [consumet/api.consumet.org](https://github.com/consumet/api.consumet.org).
-   - Deploy to Render / Railway / Fly (free tiers work). You'll get a URL.
-2. Add to Vercel env:
+**Heads-up — this path is fragile:**
+- The `aniwatch` GitHub repo got DMCA-takedown'd (npm package still installs).
+- HiAnime updates its HTML periodically, breaking the scraper until upstream patches.
+- HiAnime may be blocked or unreachable from some hosting regions.
+
+When the scraper or HiAnime fails, Tsumi **silently falls back to Real-Debrid** so the
+site keeps working — but expect needing to monitor and update `aniwatch` over time.
+
+Set in Vercel env:
 
 | Key | Value |
 | --- | --- |
-| `CONSUMET_API_URL` | your instance URL, e.g. `https://my-consumet.onrender.com` |
-| `CONSUMET_PROVIDER` | `zoro` (HiAnime — best dub) or `gogoanime` |
+| `ENABLE_HIANIME` | `true` |
 
-Redeploy. The Sub/Dub toggle now pulls real sub & dub streams from the provider; subtitles
-load automatically. Provider HLS is routed through the app's `/api/hls` proxy (the provider
-CDNs require a `Referer` header browsers can't set).
+Redeploy. The watch page now resolves a single `English Dub · HD` or `English Sub · HD`
+source per episode from HiAnime, with proper English subtitles attached. HLS routes
+through `/api/hls` (Referer injection + CORS) and subtitles through `/api/sub`.
 
-> Provider scraping is inherently less stable than Real-Debrid — keep `REALDEBRID_API_KEY`
-> set so Sub still works if the provider has an outage.
+> **Keep `REALDEBRID_API_KEY` set even with this enabled.** It's the fallback that keeps
+> the site usable when HiAnime breaks or is rate-limiting your deployment.
 
 ## 5. (Optional) Pre-roll ads & source endpoints
 
@@ -166,7 +171,6 @@ CDNs require a `Referer` header browsers can't set).
 | --- | --- | --- |
 | `NEXT_PUBLIC_IMA_AD_TAG` | _(unset)_ | Google IMA ad tag URL for real pre-roll inventory. Without it, free tier shows a 5s house placeholder. |
 | `YOUTUBE_API_KEY` | _(unset)_ | YouTube Data API v3 key. When set, detail pages show an English-preferred trailer searched on YouTube instead of AniList's JP-only PV. |
-| `JIMAKU_API_KEY` | _(unset)_ | Free API key from [jimaku.cc](https://jimaku.cc) → Account → API key. When set, the watch page shows external English subtitles (SRT/VTT) — useful when watching Dub for clarity, or when the stream itself has no embedded subs. |
 | `NEXT_PUBLIC_TORRENTIO_BASE` | `https://torrentio.strem.fun` | override if self-hosting Torrentio |
 | `NEXT_PUBLIC_ANIZIP_BASE` | `https://api.ani.zip` | AniList→Kitsu mapping |
 | `NEXT_PUBLIC_NYAA_BASE` | `https://nyaa.si` | fallback source resolver |
