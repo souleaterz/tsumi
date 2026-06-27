@@ -172,14 +172,15 @@ function playabilityScore(text: string): number {
   // Audio codec: AAC/MP3 are browser-native; OPUS/FLAC/AC3/DTS need re-encoding.
   if (/\baac\b|\bmp3\b/i.test(text)) s += 20;
   else if (/opus|flac|ac3|eac3|dts|truehd/i.test(text)) s -= 15;
-  // Resolution: prefer 720p — the smoothest balance for RD's live transcode.
-  // 1080p is demoted (heavier to transcode/stream) and 4K pushed to the bottom;
-  // both stay selectable in the picker for shows that only have them.
+  // Resolution: hard preference for 720p (and 480p over 1080p). Real-Debrid's
+  // live transcoder stutters on anything bigger, even when the source codec is
+  // friendly, and most viewer players are <1080p anyway. 1080p/4K stay in the
+  // picker for the rare show that has nothing lower, but never as the default.
   const q = parseQuality(text);
-  if (q === '720p') s += 45;
-  else if (q === '480p') s += 32;
-  else if (q === '1080p') s += 12;
-  else if (q === '2160p') s -= 40;
+  if (q === '720p') s += 80;
+  else if (q === '480p') s += 50;
+  else if (q === '1080p') s -= 10;
+  else if (q === '2160p') s -= 100;
   return s;
 }
 

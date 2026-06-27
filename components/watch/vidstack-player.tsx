@@ -18,6 +18,11 @@ import {
 import { Loader2, AlertCircle, Wifi } from 'lucide-react';
 import type { StreamSource } from '@/lib/stream/sources';
 import { saveProgress } from '@/lib/progress';
+import {
+  loadSourcePref,
+  pickPreferredIndex,
+  saveSourcePref,
+} from '@/lib/source-pref';
 
 interface PlayerProps {
   anilistId: number;
@@ -67,10 +72,17 @@ export function VidstackPlayer({
   // first pick often 404s on older episodes; auto-advance through them.
   const failedRef = useRef<Set<number>>(new Set());
   const [retryNote, setRetryNote] = useState('');
+  // Have we applied any remembered source preference for this episode yet?
+  // Resolve effect waits for this so we don't load source 0 then immediately
+  // jump to the preferred one.
+  const [prefChecked, setPrefChecked] = useState(false);
+  // Most recently saved source index for this episode; updates if the user
+  // switches sources mid-episode so we remember their final choice.
+  const lastSavedIdxRef = useRef<number>(-1);
 
   // ── Resolve the magnet → streamURL via the service-worker server ──
   useEffect(() => {
-    if (!sources.length) return;
+    if (!sources.length || !prefChecked) return;
     let destroyed = false;
     const source = sources[sourceIdx];
     setStatus('connecting');
@@ -190,7 +202,7 @@ export function VidstackPlayer({
     return () => {
       destroyed = true;
     };
-  }, [sourceIdx, sources]);
+  }, [sourceIdx, sources, prefChecked]);
 
   // Tear down the client on unmount.
   useEffect(() => {
@@ -277,19 +289,44 @@ export function VidstackPlayer({
     [sourceIdx, sources.length],
   );
 
-  // Reset the failure ledger when the episode (sources list) changes.
+  // Reset per-episode state when the source list changes (next episode).
   useEffect(() => {
     failedRef.current = new Set();
     setRetryNote('');
+    setPrefChecked(false);
+    setSourceIdx(0);
+    lastSavedIdxRef.current = -1;
   }, [sources]);
 
-  // Buffer further ahead so transcoded HLS stutters less and seeks recover faster.
+  // Apply the remembered "use this release group" preference for this anime
+  // before the resolve effect picks the default-ranked source.
+  useEffect(() => {
+    if (prefChecked || sources.length === 0) return;
+    const pref = loadSourcePref(anilistId);
+    if (pref) {
+      const idx = pickPreferredIndex(sources, pref);
+      if (idx > 0) setSourceIdx(idx);
+    }
+    setPrefChecked(true);
+  }, [anilistId, sources, prefChecked]);
+
+  // hls.js config tuned for RD's live transcode — start at the lowest bitrate
+  // and refuse to upscale beyond the player's actual size. The default ABR
+  // starts at the *highest* and gambles on bandwidth, which is exactly what
+  // causes the stutter on the first ~30s of playback.
   const onProviderChange = useCallback((provider: MediaProviderAdapter | null) => {
     if (isHLSProvider(provider)) {
       provider.config = {
+        // Bitrate selection — bias hard toward the lowest variant.
+        startLevel: 0, // begin at the lowest bitrate, not the highest
+        capLevelToPlayerSize: true, // never load levels bigger than the <video>
+        autoLevelCapping: -1,
+        abrEwmaDefaultEstimate: 1_000_000, // 1 Mbps estimate keeps ABR low
+        // Buffer ahead so seeks survive RD's transcode hiccups.
         maxBufferLength: 60,
         maxMaxBufferLength: 180,
         backBufferLength: 30,
+        // Aggressive retries — RD frequently hiccups on individual segments.
         maxFragLookUpTolerance: 0.5,
         fragLoadingMaxRetry: 6,
         manifestLoadingMaxRetry: 4,
@@ -297,6 +334,18 @@ export function VidstackPlayer({
       };
     }
   }, []);
+
+  // Whenever a (new) source actually starts playing, remember its release
+  // group so the next episode auto-picks the same one. Re-fires when the user
+  // switches sources mid-episode so manual choices stick.
+  const onPlay = useCallback(() => {
+    if (lastSavedIdxRef.current === sourceIdx) return;
+    const s = sources[sourceIdx];
+    if (s) {
+      saveSourcePref(anilistId, s);
+      lastSavedIdxRef.current = sourceIdx;
+    }
+  }, [anilistId, sourceIdx, sources]);
 
   // Resume from saved position + apply audio preference once ready.
   const onCanPlay = useCallback(() => {
@@ -323,6 +372,7 @@ export function VidstackPlayer({
           playsInline
           onProviderChange={onProviderChange}
           onCanPlay={onCanPlay}
+          onPlay={onPlay}
           onAudioTracksChange={selectPreferredAudio}
           onError={() => {
             // If an HLS transcode failed (e.g. CORS) but we have a progressive
