@@ -238,29 +238,85 @@ export function VidstackPlayer({
     return () => clearInterval(id);
   }, [status, anilistId, episode, title, coverImage, totalEpisodes, userId]);
 
-  // Pick the Japanese or English audio track based on the Sub/Dub choice —
-  // works when the (RD-transcoded) stream actually carries both tracks.
+  // Pick the English (or Japanese) audio track based on the Sub/Dub choice.
+  // Works when RD-transcoded HLS carries multiple tracks. Scoring rather than
+  // first-match because many dual-audio releases ship tracks labeled "Audio 2"
+  // / "Track 2" / "und" — the loose label-only check used to silently leave
+  // track 0 (Japanese) selected. With a clear English winner we always pick
+  // it; if nothing is labelled but there are exactly 2 tracks, we pick the
+  // *non-first* track for Dub (English is virtually always the secondary).
   const selectPreferredAudio = useCallback(() => {
     const p = playerRef.current;
     const tracks = p?.audioTracks as unknown as
-      | { length: number; [i: number]: { label?: string; language?: string; selected: boolean } }
+      | {
+          length: number;
+          [i: number]: { label?: string; language?: string; selected: boolean };
+        }
       | undefined;
     if (!tracks || tracks.length < 2) return;
+
+    let bestIdx = -1;
+    let bestScore = -Infinity;
+
     for (let i = 0; i < tracks.length; i++) {
       const t = tracks[i];
-      const s = `${t.label ?? ''} ${t.language ?? ''}`.toLowerCase();
+      const s = `${t.label ?? ''} ${t.language ?? ''}`.toLowerCase().trim();
+      let score = 0;
+
       const isEng = /\b(en|eng|english)\b/.test(s);
       const isJpn = /\b(ja|jp|jpn|japanese)\b/.test(s);
-      if (preferDub ? isEng : isJpn) {
-        try {
-          t.selected = true;
-        } catch {
-          /* track not selectable */
-        }
-        return;
+      const isDub = /\b(dub|dubbed)\b/.test(s);
+      const isOriginal = /\b(sub|subbed|original)\b/.test(s);
+
+      if (preferDub) {
+        if (isEng) score += 100;
+        if (isDub) score += 60;
+        if (isJpn) score -= 100;
+        if (isOriginal) score -= 40;
+        // Anime dual-audio releases ship JP as track 0 and ENG as track 1.
+        // If neither track has language tags, prefer non-first.
+        if (i > 0) score += 5;
+      } else {
+        if (isJpn) score += 100;
+        if (isOriginal) score += 50;
+        if (isEng) score -= 100;
+        if (isDub) score -= 40;
+        if (i === 0) score += 5;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
       }
     }
+
+    // Only switch if we found a real preference (positive score) AND it's not
+    // already selected — switching mid-playback briefly stalls audio.
+    if (bestIdx < 0 || bestScore <= 0) return;
+    const currentlySelected = tracks[bestIdx].selected;
+    if (currentlySelected) return;
+
+    try {
+      tracks[bestIdx].selected = true;
+    } catch {
+      /* track not selectable */
+    }
   }, [preferDub]);
+
+  // RD-transcoded HLS sometimes loads audio renditions asynchronously after
+  // the player reports canplay. Re-run the selection a few times in the first
+  // ~3s of playback to catch them — the function is idempotent and cheap.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const id1 = setTimeout(selectPreferredAudio, 500);
+    const id2 = setTimeout(selectPreferredAudio, 1500);
+    const id3 = setTimeout(selectPreferredAudio, 3000);
+    return () => {
+      clearTimeout(id1);
+      clearTimeout(id2);
+      clearTimeout(id3);
+    };
+  }, [status, selectPreferredAudio, sourceIdx]);
 
   /**
    * Mark the current source as failed and try the next-ranked working one.

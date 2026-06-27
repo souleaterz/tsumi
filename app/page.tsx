@@ -3,6 +3,7 @@ import { getPopular, getSeasonal, getTrending, currentSeason } from '@/lib/anili
 import { Hero } from '@/components/home/hero';
 import { ContinueWatching } from '@/components/home/continue-watching';
 import { Recommended } from '@/components/home/recommended';
+import { AdSlot } from '@/components/ui/ad-slot';
 import { CardRow } from '@/components/ui/card-row';
 import { AnimeCard } from '@/components/ui/anime-card';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -62,6 +63,11 @@ export default async function HomePage() {
         />
         <CardRow items={trending} />
       </section>
+
+      {/* Ad slot — between Trending and Seasonal rows. */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <AdSlot slot="home-banner" />
+      </div>
 
       {/* SEASONAL — diagonal accent band */}
       <section className="relative my-10">

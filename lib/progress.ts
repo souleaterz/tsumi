@@ -78,6 +78,34 @@ export async function getContinueWatching(
     .slice(0, limit);
 }
 
+/**
+ * Return every recorded episode for a single anime — used to render watched
+ * ticks on the episode list. Map keys are episode numbers.
+ */
+export async function getAnimeProgress(
+  anilistId: number,
+  userId?: string | null,
+): Promise<Map<number, ProgressEntry>> {
+  const out = new Map<number, ProgressEntry>();
+  if (userId) {
+    try {
+      const res = await fetch(`/api/progress?anilistId=${anilistId}`);
+      if (res.ok) {
+        const { items } = (await res.json()) as { items: ProgressEntry[] };
+        items?.forEach((e) => out.set(e.episode, e));
+      }
+    } catch {
+      /* network error */
+    }
+    return out;
+  }
+  // Signed-out: localStorage fallback.
+  readLocal()
+    .filter((e) => e.anilistId === anilistId)
+    .forEach((e) => out.set(e.episode, e));
+  return out;
+}
+
 export async function getEpisodeProgress(
   anilistId: number,
   episode: number,

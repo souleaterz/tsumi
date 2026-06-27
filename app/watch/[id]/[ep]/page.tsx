@@ -7,8 +7,10 @@ import { resolveStreams, getEpisodeMeta, isDebridEnabled } from '@/lib/stream/so
 import { isProviderEnabled } from '@/lib/stream/provider';
 import { bestTitle } from '@/lib/utils';
 import { getProStatus, currentUserId } from '@/lib/subscription';
+import { getEpisodeSubs } from '@/lib/subs';
 import { WatchExperience } from '@/components/watch/watch-experience';
 import { EpisodeNav } from '@/components/watch/episode-nav';
+import { AdSlot } from '@/components/ui/ad-slot';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,15 @@ export default async function WatchPage({ params, searchParams }: Props) {
   ]);
   if (!media) notFound();
 
+  // English subtitles via OpenSubtitles (opt-in, gated by OPENSUBTITLES_API_KEY).
+  // Routed through /api/sub for CORS + SRT→VTT conversion.
+  const subTitle = media.title.english || media.title.romaji || '';
+  const externalSubs = await getEpisodeSubs(subTitle, ep);
+  const subtitleTracks = externalSubs.map((s, i) => ({
+    url: `/api/sub?url=${encodeURIComponent(s.url)}`,
+    lang: externalSubs.length > 1 ? `English ${i + 1}` : 'English',
+  }));
+
   const title = bestTitle(media.title);
   const romaji = media.title.romaji || media.title.english || undefined;
   // Romaji title gives the Nyaa fallback the best chance of matching releases.
@@ -50,15 +61,21 @@ export default async function WatchPage({ params, searchParams }: Props) {
 
   // Sanitise for the client: Real-Debrid sources carry a resolver URL with the
   // RD key — strip it and expose a keyless /api/stream-url endpoint instead.
+  // Provider sources keep their own (already-English) subtitle tracks; we
+  // attach external subs only to RD/torrent sources that don't have any.
   const sources = resolved.map((s) => {
     const { url, ...safe } = s;
+    const withSubs =
+      s.subtitles && s.subtitles.length > 0
+        ? safe
+        : { ...safe, subtitles: subtitleTracks };
     if (url) {
       return {
-        ...safe,
+        ...withSubs,
         playUrl: `/api/stream-url/${id}/${ep}?t=${encodeURIComponent(s.title)}`,
       };
     }
-    return safe;
+    return withSubs;
   });
 
   const cover = media.coverImage?.extraLarge || media.coverImage?.large || undefined;
@@ -166,6 +183,9 @@ export default async function WatchPage({ params, searchParams }: Props) {
               : ', streamed peer-to-peer via WebTorrent.'}
           </p>
         )}
+
+        {/* Ad slot — below the player + episode metadata. */}
+        <AdSlot slot="watch-banner" />
       </div>
     </div>
   );

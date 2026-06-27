@@ -11,6 +11,7 @@ import { AnimeCard } from '@/components/ui/anime-card';
 import { SectionHeader } from '@/components/ui/section-header';
 import { WatchlistButton } from '@/components/anime/watchlist-button';
 import { EpisodeList } from '@/components/anime/episode-list';
+import { AdSlot } from '@/components/ui/ad-slot';
 import { Countdown } from '@/components/ui/countdown';
 import { getBestTrailerId } from '@/lib/trailer';
 
@@ -209,6 +210,9 @@ export default async function AnimeDetailPage({ params }: Props) {
             </div>
           </section>
         )}
+
+        {/* Ad slot — between trailer/synopsis and the episode list. */}
+        <AdSlot slot="detail-banner" />
 
         {/* Episodes */}
         <section className="mt-14">

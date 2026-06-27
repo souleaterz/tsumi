@@ -169,8 +169,11 @@ through `/api/hls` (Referer injection + CORS) and subtitles through `/api/sub`.
 
 | Key | Default | Notes |
 | --- | --- | --- |
+| `NEXT_PUBLIC_AD_NETWORK` | _(unset)_ | Identifier (`adsense`, `adsterra`, `propellerads` etc.) — any non-empty value turns on the banner ad slots on home / detail / watch pages. Hidden for Pro users. Pair with `NEXT_PUBLIC_AD_SCRIPT`. |
+| `NEXT_PUBLIC_AD_SCRIPT` | _(unset)_ | URL of the ad network's loader script (e.g. `https://pagead2.googlesyndication.com/...`). Injected lazily into the root layout. The network's script then fills the `<AdSlot>` divs by their `data-tsumi-ad-slot` attribute. |
 | `NEXT_PUBLIC_IMA_AD_TAG` | _(unset)_ | Google IMA ad tag URL for real pre-roll inventory. Without it, free tier shows a 5s house placeholder. |
 | `YOUTUBE_API_KEY` | _(unset)_ | YouTube Data API v3 key. When set, detail pages show an English-preferred trailer searched on YouTube instead of AniList's JP-only PV. |
+| `OPENSUBTITLES_API_KEY` | _(unset)_ | Free key from [opensubtitles.com/consumers](https://www.opensubtitles.com/consumers). When set, English subtitles are fetched per episode and attached to RD/torrent sources. Set `OPENSUBTITLES_USER_AGENT` alongside (e.g. `Tsumi/1.0`). |
 | `NEXT_PUBLIC_TORRENTIO_BASE` | `https://torrentio.strem.fun` | override if self-hosting Torrentio |
 | `NEXT_PUBLIC_ANIZIP_BASE` | `https://api.ani.zip` | AniList→Kitsu mapping |
 | `NEXT_PUBLIC_NYAA_BASE` | `https://nyaa.si` | fallback source resolver |

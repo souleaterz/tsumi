@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Play } from 'lucide-react';
+import { Play, Check } from 'lucide-react';
 import type { EpisodeMeta } from '@/lib/stream/sources';
+import { getAnimeProgress, type ProgressEntry } from '@/lib/progress';
+import { useUserId } from '@/lib/auth/use-user-id';
 
 const RANGE_SIZE = 50;
 
@@ -19,6 +21,20 @@ export function EpisodeList({
   meta: EpisodeMeta[];
   cover?: string;
 }) {
+  // Per-episode watch state — drives the "watched" tick + the resume bar.
+  const { userId, isLoaded } = useUserId();
+  const [progress, setProgress] = useState<Map<number, ProgressEntry>>(new Map());
+  useEffect(() => {
+    if (!isLoaded) return;
+    let active = true;
+    getAnimeProgress(anilistId, userId).then((m) => {
+      if (active) setProgress(m);
+    });
+    return () => {
+      active = false;
+    };
+  }, [anilistId, isLoaded, userId]);
+
   // Use Anizip metadata when available; otherwise synthesize numeric episodes.
   const episodes = useMemo(() => {
     const count = Math.max(totalEpisodes || 0, meta.length);
@@ -118,11 +134,21 @@ export function EpisodeList({
           const label = inSeason
             ? `E${displayNum} · S${ep.seasonNumber}`
             : `Episode ${displayNum}`;
+          const prog = progress.get(ep.episode);
+          const watched = !!prog?.completed;
+          const inProgressPct =
+            !watched && prog && prog.durationSec > 0
+              ? Math.min(100, (prog.positionSec / prog.durationSec) * 100)
+              : 0;
           return (
             <Link
               key={ep.episode}
               href={`/watch/${anilistId}/${ep.episode}`}
-              className="group flex items-center gap-4 overflow-hidden rounded-xl border border-white/5 bg-surface/40 p-3 transition-all hover:border-primary/40 hover:bg-surface/70 hover:shadow-glow"
+              className={`group flex items-center gap-4 overflow-hidden rounded-xl border p-3 transition-all hover:border-primary/40 hover:bg-surface/70 hover:shadow-glow ${
+                watched
+                  ? 'border-primary/30 bg-primary/5'
+                  : 'border-white/5 bg-surface/40'
+              }`}
             >
               <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-lg bg-base sm:w-40">
                 {img && (
@@ -131,17 +157,38 @@ export function EpisodeList({
                     alt={label}
                     fill
                     sizes="160px"
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    className={`object-cover transition-transform duration-500 group-hover:scale-105 ${
+                      watched ? 'opacity-60' : ''
+                    }`}
                   />
                 )}
                 <div className="absolute inset-0 flex items-center justify-center bg-base/40 opacity-0 transition-opacity group-hover:opacity-100">
                   <Play className="h-7 w-7 fill-white text-white drop-shadow" />
                 </div>
+                {/* Episode number badge (top-left) */}
                 <span className="absolute left-1.5 top-1.5 rounded bg-base/80 px-1.5 py-0.5 text-[10px] font-bold text-accent backdrop-blur">
                   {inSeason
                     ? `S${ep.seasonNumber}E${String(displayNum).padStart(2, '0')}`
                     : String(displayNum).padStart(2, '0')}
                 </span>
+                {/* Watched tick (top-right, hard to miss) */}
+                {watched && (
+                  <span
+                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-[0_0_12px_rgba(124,58,237,0.6)] ring-2 ring-primary/40"
+                    title="Watched"
+                  >
+                    <Check className="h-3.5 w-3.5 stroke-[3]" />
+                  </span>
+                )}
+                {/* In-progress bar at the bottom of the thumbnail */}
+                {inProgressPct > 0 && (
+                  <div className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-accent"
+                      style={{ width: `${inProgressPct}%` }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="min-w-0 flex-1">

@@ -44,6 +44,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ entry: data ? rowToEntry(data) : null });
   }
 
+  // ?anilistId without ?episode → all entries for that anime (drives the
+  // "watched" tick badges on the episode list).
+  if (anilistId) {
+    const { data } = await supabase
+      .from('watch_progress')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('anilist_id', Number(anilistId));
+    return NextResponse.json({ items: (data || []).map(rowToEntry) });
+  }
+
   const limit = Number(sp.get('limit')) || 24;
   // ?all=1 → full history (incl. completed); default → continue-watching only.
   let query = supabase

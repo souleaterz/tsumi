@@ -3,6 +3,7 @@ import { bebas, inter, notoJp } from '@/lib/fonts';
 import { Providers } from '@/components/providers';
 import { Navbar } from '@/components/layout/navbar';
 import { Footer } from '@/components/layout/footer';
+import { AdLoader } from '@/components/ad-loader';
 import './globals.css';
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -52,6 +53,7 @@ export default function RootLayout({
           <main className="relative">{children}</main>
           <Footer />
         </Providers>
+        <AdLoader />
       </body>
     </html>
   );

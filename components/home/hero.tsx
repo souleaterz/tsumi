@@ -47,8 +47,8 @@ export function Hero({ items }: { items: AnilistMedia[] }) {
       )}
 
       {/* Cinematic gradients */}
-      <div className="absolute inset-0 bg-gradient-to-t from-base via-base/70 to-base/20" />
-      <div className="absolute inset-0 bg-gradient-to-r from-base via-base/60 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-base via-base/85 to-base/20" />
+      <div className="absolute inset-0 bg-gradient-to-r from-base via-base/75 to-transparent" />
       <div className="grain pointer-events-none absolute inset-0" />
 
       {/* Carousel arrows */}
@@ -110,7 +110,10 @@ export function Hero({ items }: { items: AnilistMedia[] }) {
           </div>
         </div>
 
-        <p className="mt-4 max-w-2xl text-sm leading-relaxed text-zinc-300 sm:text-base">
+        <p
+          className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-zinc-50 sm:text-base"
+          style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.95)' }}
+        >
           {truncate(stripHtml(media.description), 240)}
         </p>
 
