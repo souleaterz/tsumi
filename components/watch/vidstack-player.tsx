@@ -239,12 +239,14 @@ export function VidstackPlayer({
   }, [status, anilistId, episode, title, coverImage, totalEpisodes, userId]);
 
   // Pick the English (or Japanese) audio track based on the Sub/Dub choice.
-  // Works when RD-transcoded HLS carries multiple tracks. Scoring rather than
-  // first-match because many dual-audio releases ship tracks labeled "Audio 2"
-  // / "Track 2" / "und" — the loose label-only check used to silently leave
-  // track 0 (Japanese) selected. With a clear English winner we always pick
-  // it; if nothing is labelled but there are exactly 2 tracks, we pick the
-  // *non-first* track for Dub (English is virtually always the secondary).
+  //
+  // The rule: we only ever switch to a track POSITIVELY identified as the
+  // language we want. The previous version gave a "non-first track" fallback
+  // bonus to catch unlabelled English dubs — but for multi-language European
+  // releases (e.g. JP / German / Spanish / French) that fallback meant German
+  // won the Dub preference. Now: explicitly classify each track and only
+  // switch on a definite match. If the only options are foreign-language
+  // (no English at all), leave the default selection alone.
   const selectPreferredAudio = useCallback(() => {
     const p = playerRef.current;
     const tracks = p?.audioTracks as unknown as
@@ -255,51 +257,66 @@ export function VidstackPlayer({
       | undefined;
     if (!tracks || tracks.length < 2) return;
 
-    let bestIdx = -1;
-    let bestScore = -Infinity;
+    // ── language classification ──────────────────────────────────────────
+    // ISO-639-1/2 codes + common spellings. \b boundaries stop "Default" from
+    // matching "de", "English" from matching "en" as a substring, etc.
+    const ENGLISH = /\b(en|eng|english)\b/i;
+    const JAPANESE = /\b(ja|jp|jpn|japanese|japan|nihongo)\b/i;
+    // Every other language code we've seen in HLS audio-track labels.
+    const FOREIGN =
+      /\b(de|deu|ger|german|deutsch|es|spa|esp|spanish|español|latino|fr|fra|fre|french|fran[cç]ais|pt|por|portuguese|portugu[eê]s|brasileiro|it|ita|italian|italiano|ru|rus|russian|zh|chi|chinese|mandarin|cantonese|ko|kor|korean|ar|ara|arabic|pl|pol|polish|nl|nld|dutch|tr|tur|turkish|id|ind|indonesian|vi|vie|vietnamese|th|tha|thai|hi|hin|hindi|cs|ces|czech|sv|swe|swedish|no|nor|norwegian|da|dan|danish|fi|fin|finnish|hu|hun|hungarian|el|gre|greek|he|heb|hebrew|uk|ukr|ukrainian|ro|ron|romanian|bg|bul|bulgarian)\b/i;
+    // Anime-specific hints when there's no language tag.
+    const DUB_HINT = /\b(dub|dubbed)\b/i;
+    const ORIGINAL_HINT = /\b(sub|subbed|original|raw)\b/i;
 
-    for (let i = 0; i < tracks.length; i++) {
-      const t = tracks[i];
-      const s = `${t.label ?? ''} ${t.language ?? ''}`.toLowerCase().trim();
-      let score = 0;
-
-      const isEng = /\b(en|eng|english)\b/.test(s);
-      const isJpn = /\b(ja|jp|jpn|japanese)\b/.test(s);
-      const isDub = /\b(dub|dubbed)\b/.test(s);
-      const isOriginal = /\b(sub|subbed|original)\b/.test(s);
-
-      if (preferDub) {
-        if (isEng) score += 100;
-        if (isDub) score += 60;
-        if (isJpn) score -= 100;
-        if (isOriginal) score -= 40;
-        // Anime dual-audio releases ship JP as track 0 and ENG as track 1.
-        // If neither track has language tags, prefer non-first.
-        if (i > 0) score += 5;
-      } else {
-        if (isJpn) score += 100;
-        if (isOriginal) score += 50;
-        if (isEng) score -= 100;
-        if (isDub) score -= 40;
-        if (i === 0) score += 5;
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = i;
-      }
+    type Cls = 'english' | 'japanese' | 'foreign' | 'unknown';
+    function classify(label: string): Cls {
+      const s = label.toLowerCase().trim();
+      if (ENGLISH.test(s)) return 'english';
+      if (JAPANESE.test(s)) return 'japanese';
+      if (FOREIGN.test(s)) return 'foreign';
+      // No explicit language — fall back to dub/original hints (anime convention).
+      if (DUB_HINT.test(s)) return 'english';
+      if (ORIGINAL_HINT.test(s)) return 'japanese';
+      return 'unknown';
     }
 
-    // Only switch if we found a real preference (positive score) AND it's not
-    // already selected — switching mid-playback briefly stalls audio.
-    if (bestIdx < 0 || bestScore <= 0) return;
-    const currentlySelected = tracks[bestIdx].selected;
-    if (currentlySelected) return;
+    const classes: { i: number; cls: Cls; selected: boolean }[] = [];
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      const label = `${t.label ?? ''} ${t.language ?? ''}`;
+      classes.push({ i, cls: classify(label), selected: t.selected });
+    }
 
-    try {
-      tracks[bestIdx].selected = true;
-    } catch {
-      /* track not selectable */
+    const want: Cls = preferDub ? 'english' : 'japanese';
+    const match = classes.find((c) => c.cls === want);
+
+    if (match) {
+      if (match.selected) return;
+      try {
+        tracks[match.i].selected = true;
+      } catch {
+        /* not selectable */
+      }
+      return;
+    }
+
+    // No positive match for the desired language.
+    // If *any* track is positively a foreign language, we know English/JP isn't
+    // available — leave the default alone rather than guessing into German.
+    if (classes.some((c) => c.cls === 'foreign')) return;
+
+    // All tracks "unknown": fall back to the dual-audio convention for Dub,
+    // and to the first track for Sub. Conservative — only for exactly 2 tracks.
+    if (tracks.length === 2) {
+      const targetIdx = preferDub ? 1 : 0;
+      if (!tracks[targetIdx].selected) {
+        try {
+          tracks[targetIdx].selected = true;
+        } catch {
+          /* not selectable */
+        }
+      }
     }
   }, [preferDub]);
 
