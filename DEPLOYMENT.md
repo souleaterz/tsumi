@@ -166,6 +166,7 @@ CDNs require a `Referer` header browsers can't set).
 | --- | --- | --- |
 | `NEXT_PUBLIC_IMA_AD_TAG` | _(unset)_ | Google IMA ad tag URL for real pre-roll inventory. Without it, free tier shows a 5s house placeholder. |
 | `YOUTUBE_API_KEY` | _(unset)_ | YouTube Data API v3 key. When set, detail pages show an English-preferred trailer searched on YouTube instead of AniList's JP-only PV. |
+| `JIMAKU_API_KEY` | _(unset)_ | Free API key from [jimaku.cc](https://jimaku.cc) → Account → API key. When set, the watch page shows external English subtitles (SRT/VTT) — useful when watching Dub for clarity, or when the stream itself has no embedded subs. |
 | `NEXT_PUBLIC_TORRENTIO_BASE` | `https://torrentio.strem.fun` | override if self-hosting Torrentio |
 | `NEXT_PUBLIC_ANIZIP_BASE` | `https://api.ani.zip` | AniList→Kitsu mapping |
 | `NEXT_PUBLIC_NYAA_BASE` | `https://nyaa.si` | fallback source resolver |

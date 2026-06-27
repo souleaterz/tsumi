@@ -63,6 +63,10 @@ export function VidstackPlayer({
   // Progressive-MP4 URL to fall back to if an HLS transcode fails (CORS, etc.).
   const mp4FallbackRef = useRef<string | null>(null);
   const [subtitles, setSubtitles] = useState<{ url: string; lang: string }[]>([]);
+  // Indices that already failed — Real-Debrid evicts cached torrents, so the
+  // first pick often 404s on older episodes; auto-advance through them.
+  const failedRef = useRef<Set<number>>(new Set());
+  const [retryNote, setRetryNote] = useState('');
 
   // ── Resolve the magnet → streamURL via the service-worker server ──
   useEffect(() => {
@@ -103,10 +107,13 @@ export function VidstackPlayer({
           setStatus('ready');
         } catch (err) {
           if (destroyed) return;
-          setStatus('error');
-          setErrorMsg(
-            err instanceof Error ? err.message : 'Could not resolve this stream.',
-          );
+          // RD evicted the cached torrent, or the unrestrict link 404'd.
+          // Auto-advance to the next source instead of dead-ending the user.
+          const msg =
+            err instanceof Error && /evict|cache|not cached|unavailable/i.test(err.message)
+              ? 'was removed from Real-Debrid'
+              : 'could not be resolved';
+          tryNextSource(msg);
         }
       })();
       return () => {
@@ -151,8 +158,7 @@ export function VidstackPlayer({
               )[0] ?? torrent.files[0];
 
           if (!file) {
-            setStatus('error');
-            setErrorMsg('No playable video file found in this source.');
+            tryNextSource('had no playable video file');
             return;
           }
 
@@ -244,6 +250,39 @@ export function VidstackPlayer({
     }
   }, [preferDub]);
 
+  /**
+   * Mark the current source as failed and try the next-ranked working one.
+   * Used when RD has evicted a cached torrent, an unrestrict 404s, or the
+   * codec just won't play. Only surfaces an error once every source is gone.
+   */
+  const tryNextSource = useCallback(
+    (reason: string) => {
+      const failed = failedRef.current;
+      failed.add(sourceIdx);
+      if (failed.size >= sources.length) {
+        setStatus('error');
+        setErrorMsg(
+          'No working sources for this episode — Real-Debrid may have evicted them, or your browser cannot play their codec.',
+        );
+        return;
+      }
+      // Find the next un-tried source.
+      let next = (sourceIdx + 1) % sources.length;
+      while (failed.has(next)) next = (next + 1) % sources.length;
+      setRetryNote(
+        `Source ${sourceIdx + 1} ${reason}. Trying source ${next + 1} of ${sources.length}…`,
+      );
+      setSourceIdx(next);
+    },
+    [sourceIdx, sources.length],
+  );
+
+  // Reset the failure ledger when the episode (sources list) changes.
+  useEffect(() => {
+    failedRef.current = new Set();
+    setRetryNote('');
+  }, [sources]);
+
   // Buffer further ahead so transcoded HLS stutters less and seeks recover faster.
   const onProviderChange = useCallback((provider: MediaProviderAdapter | null) => {
     if (isHLSProvider(provider)) {
@@ -294,8 +333,7 @@ export function VidstackPlayer({
               setSrc(mp4);
               return;
             }
-            setStatus('error');
-            setErrorMsg('This source could not be played in your browser.');
+            tryNextSource('could not be played in your browser');
           }}
           className="h-full w-full"
         >
@@ -337,9 +375,11 @@ export function VidstackPlayer({
             <>
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
               <p className="text-sm text-zinc-300">
-                {isDirect
-                  ? 'Loading stream…'
-                  : `Connecting to peers… ${downloadPct > 0 ? `${downloadPct}% buffered` : ''}`}
+                {retryNote
+                  ? retryNote
+                  : isDirect
+                    ? 'Loading stream…'
+                    : `Connecting to peers… ${downloadPct > 0 ? `${downloadPct}% buffered` : ''}`}
               </p>
               <p className="katakana text-[10px]">ストリーミング準備中</p>
             </>

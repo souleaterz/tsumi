@@ -7,6 +7,7 @@ import { resolveStreams, getEpisodeMeta, isDebridEnabled } from '@/lib/stream/so
 import { isProviderEnabled } from '@/lib/stream/provider';
 import { bestTitle } from '@/lib/utils';
 import { getProStatus, currentUserId } from '@/lib/subscription';
+import { getEpisodeSubs } from '@/lib/subs';
 import { WatchExperience } from '@/components/watch/watch-experience';
 import { EpisodeNav } from '@/components/watch/episode-nav';
 
@@ -32,12 +33,21 @@ export default async function WatchPage({ params, searchParams }: Props) {
   const wantDub = searchParams.audio !== 'sub';
 
   const userId = await currentUserId();
-  const [media, epMeta, isPro] = await Promise.all([
+  const [media, epMeta, isPro, externalSubs] = await Promise.all([
     getAnimeDetail(id),
     getEpisodeMeta(id),
     getProStatus(userId),
+    getEpisodeSubs(id, ep),
   ]);
   if (!media) notFound();
+
+  // Proxy each subtitle through /api/sub for CORS + SRT→VTT conversion. These
+  // attach to every source so users can toggle captions regardless of which
+  // RD/torrent stream ends up playing.
+  const subtitleTracks = externalSubs.map((s, i) => ({
+    url: `/api/sub?url=${encodeURIComponent(s.url)}`,
+    lang: externalSubs.length > 1 ? `${s.lang} (${i + 1})` : s.lang,
+  }));
 
   const title = bestTitle(media.title);
   const romaji = media.title.romaji || media.title.english || undefined;
@@ -50,15 +60,21 @@ export default async function WatchPage({ params, searchParams }: Props) {
 
   // Sanitise for the client: Real-Debrid sources carry a resolver URL with the
   // RD key — strip it and expose a keyless /api/stream-url endpoint instead.
+  // Also attach external Jimaku subtitles to non-provider sources (provider
+  // streams already include their own subtitle tracks).
   const sources = resolved.map((s) => {
     const { url, ...safe } = s;
+    const withSubs =
+      s.subtitles && s.subtitles.length > 0
+        ? safe
+        : { ...safe, subtitles: subtitleTracks };
     if (url) {
       return {
-        ...safe,
+        ...withSubs,
         playUrl: `/api/stream-url/${id}/${ep}?t=${encodeURIComponent(s.title)}`,
       };
     }
-    return safe;
+    return withSubs;
   });
 
   const cover = media.coverImage?.extraLarge || media.coverImage?.large || undefined;
