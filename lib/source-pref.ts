@@ -48,10 +48,23 @@ export function fingerprint(s: StreamSource): SourceFingerprint {
   };
 }
 
+/**
+ * 1080p/2160p are never the user's true preference — they almost always come
+ * from accidentally playing a high-res source under the old ranking. Strip
+ * them so the next episode falls back to the new ranking's 720p preference.
+ */
+function effectiveQuality(q?: string): string | undefined {
+  if (q === '1080p' || q === '2160p') return undefined;
+  return q;
+}
+
 export function saveSourcePref(anilistId: number, s: StreamSource) {
   if (typeof window === 'undefined') return;
   try {
     const fp = fingerprint(s);
+    // Don't persist 1080p/2160p as a quality preference — only the release
+    // group + container carry over. User's explicit 720p/480p choices DO stick.
+    fp.quality = effectiveQuality(fp.quality);
     if (!fp.group && !fp.quality) return; // nothing useful to remember
     localStorage.setItem(KEY_PREFIX + anilistId, JSON.stringify(fp));
   } catch {
@@ -81,6 +94,10 @@ export function pickPreferredIndex(
 ): number {
   if (!sources.length) return -1;
 
+  // Always strip 1080p/2160p from the saved quality match — handles older
+  // prefs persisted before we stopped recording them. The group still sticks.
+  const wantedQuality = effectiveQuality(pref.quality);
+
   let bestIdx = -1;
   let bestScore = 0;
 
@@ -90,7 +107,7 @@ export function pickPreferredIndex(
     if (pref.group && fp.group && pref.group.toLowerCase() === fp.group.toLowerCase()) {
       score += 4;
     }
-    if (pref.quality && fp.quality && pref.quality === fp.quality) {
+    if (wantedQuality && fp.quality && wantedQuality === fp.quality) {
       score += 2;
     }
     if (pref.container && fp.container && pref.container === fp.container) {

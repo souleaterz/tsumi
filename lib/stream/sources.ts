@@ -172,15 +172,19 @@ function playabilityScore(text: string): number {
   // Audio codec: AAC/MP3 are browser-native; OPUS/FLAC/AC3/DTS need re-encoding.
   if (/\baac\b|\bmp3\b/i.test(text)) s += 20;
   else if (/opus|flac|ac3|eac3|dts|truehd/i.test(text)) s -= 15;
-  // Resolution: hard preference for 720p (and 480p over 1080p). Real-Debrid's
-  // live transcoder stutters on anything bigger, even when the source codec is
-  // friendly, and most viewer players are <1080p anyway. 1080p/4K stay in the
-  // picker for the rare show that has nothing lower, but never as the default.
+  // Resolution: HARD preference for 720p/480p. Real-Debrid's live transcoder
+  // is the bottleneck on 1080p — most viewers report stutter within ~30s as
+  // RD's bandwidth catches up to a single-bitrate 1080p output. We push 1080p
+  // and 4K so far down they can only win if literally nothing else exists
+  // (Netflix-original shows like SAO/JJK/Black Clover often have only 1080p
+  // releases on Torrentio). The resolvePlayable() step will then ask RD to
+  // serve the file's pre-rendered 720p/480p variant anyway, sidestepping the
+  // transcode bottleneck even when the source file is 1080p.
   const q = parseQuality(text);
   if (q === '720p') s += 80;
   else if (q === '480p') s += 50;
-  else if (q === '1080p') s -= 10;
-  else if (q === '2160p') s -= 100;
+  else if (q === '1080p') s -= 200;
+  else if (q === '2160p') s -= 300;
   return s;
 }
 
@@ -463,6 +467,58 @@ function deepFindUrl(obj: unknown, re: RegExp): string | null {
 }
 
 /**
+ * Pick the LOWEST-quality URL from Real-Debrid's transcode response.
+ *
+ * The response is shaped like `{ "full": "...1080p.m3u8", "1080": ..., "720":
+ * ..., "480": ... }` — `Object.values()` returns the highest-quality first,
+ * which is why we used to always serve 1080p. We instead probe known low-
+ * quality keys first, then sniff URL paths for resolution hints, then fall
+ * back to anything that isn't the "full" / "1080" / "2160" variant. Stuttering
+ * was happening because RD was transcoding the source file to 1080p in real
+ * time even when we wanted lower; this asks for a smaller pre-encoded variant.
+ */
+function pickLowestQualityUrl(container: unknown, re: RegExp): string | null {
+  if (!container) return null;
+  if (typeof container === 'string') return re.test(container) ? container : null;
+  if (typeof container !== 'object') return null;
+
+  const entries = Object.entries(container as Record<string, unknown>);
+
+  // 1. Named low-quality keys first. RD typically uses bare numerics.
+  for (const wanted of ['480', '720', '360', '240', '420p', '480p', '720p', 'low', 'med']) {
+    const hit = entries.find(([k]) => k.toLowerCase() === wanted.toLowerCase());
+    if (hit) {
+      const url = deepFindUrl(hit[1], re);
+      if (url) return url;
+    }
+  }
+
+  // 2. Any URL with a low-quality marker in its path.
+  for (const [, v] of entries) {
+    const url = deepFindUrl(v, re);
+    if (url && /\b(360|480|720)\b|\b(low|med)\b/i.test(url)) return url;
+  }
+
+  // 3. Anything that isn't the explicit "high quality" key.
+  for (const [k, v] of entries) {
+    const lk = k.toLowerCase();
+    if (lk === 'full' || lk === '1080' || lk === '2160' || lk === '1080p' || lk === 'high') {
+      continue;
+    }
+    const url = deepFindUrl(v, re);
+    if (url) return url;
+  }
+
+  // 4. Last resort — any URL.
+  for (const [, v] of entries) {
+    const url = deepFindUrl(v, re);
+    if (url) return url;
+  }
+
+  return null;
+}
+
+/**
  * Turn a Torrentio Real-Debrid resolver URL into something the browser can
  * actually play. `.mp4`/`.webm` files stream directly; `.mkv` and other
  * non-browser containers are transcoded by Real-Debrid to HLS (with a
@@ -489,10 +545,20 @@ export async function resolvePlayable(
     });
     if (!res.ok) return { url: finalUrl, hls: false };
     const t = await res.json();
-    const hls = deepFindUrl(t?.apple, /\.m3u8/i);
-    const mp4 = deepFindUrl(t?.liveMP4, /^https?:/i);
-    if (hls) return { url: hls, hls: true, mp4Fallback: mp4 ?? undefined };
+
+    // Pick the LOWEST pre-encoded variant available — RD pre-renders multiple
+    // bitrates ("full"/"1080"/"720"/"480") and we want the smallest one for
+    // smoothness. Progressive MP4 wins over HLS when present: no segment
+    // alignment overhead, real byte-range seeking, no adaptive logic at all.
+    const mp4 = pickLowestQualityUrl(t?.liveMP4, /^https?:/i);
     if (mp4) return { url: mp4, hls: false };
+
+    const hls = pickLowestQualityUrl(t?.apple, /\.m3u8/i);
+    if (hls) {
+      // Keep the (possibly higher-quality) mp4 as a fallback if HLS fails.
+      const mp4Fallback = deepFindUrl(t?.liveMP4, /^https?:/i) ?? undefined;
+      return { url: hls, hls: true, mp4Fallback };
+    }
     return { url: finalUrl, hls: false };
   } catch {
     return { url: finalUrl, hls: false };
