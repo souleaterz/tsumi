@@ -67,6 +67,10 @@ export function VidstackPlayer({
   const [speed, setSpeed] = useState(0);
   // Progressive-MP4 URL to fall back to if an HLS transcode fails (CORS, etc.).
   const mp4FallbackRef = useRef<string | null>(null);
+  // Tracks the kind of source currently loading so onProviderChange can tune
+  // hls.js differently for CDN-backed provider HLS (adaptive bitrate, multiple
+  // levels) vs Real-Debrid's live transcode (single quality, transcode-limited).
+  const sourceKindRef = useRef<'provider' | 'rd' | 'other'>('other');
   const [subtitles, setSubtitles] = useState<{ url: string; lang: string }[]>([]);
   // Indices that already failed — Real-Debrid evicts cached torrents, so the
   // first pick often 404s on older episodes; auto-advance through them.
@@ -93,6 +97,7 @@ export function VidstackPlayer({
 
     // ── Provider: a ready-to-play (proxied) HLS stream. ──
     if (source.hlsUrl) {
+      sourceKindRef.current = 'provider';
       setSrc({ src: source.hlsUrl, type: 'application/x-mpegurl' });
       setStatus('ready');
       return () => {
@@ -102,6 +107,7 @@ export function VidstackPlayer({
 
     // ── Real-Debrid: resolve a browser-playable stream. No WebTorrent needed. ──
     if (source.playUrl) {
+      sourceKindRef.current = 'rd';
       (async () => {
         try {
           const res = await fetch(source.playUrl!);
@@ -133,6 +139,7 @@ export function VidstackPlayer({
       };
     }
 
+    sourceKindRef.current = 'other';
     (async () => {
       try {
         if (!source.magnet) {
@@ -383,29 +390,57 @@ export function VidstackPlayer({
     setPrefChecked(true);
   }, [anilistId, sources, prefChecked]);
 
-  // hls.js config tuned for RD's live transcode — start at the lowest bitrate
-  // and refuse to upscale beyond the player's actual size. The default ABR
-  // starts at the *highest* and gambles on bandwidth, which is exactly what
-  // causes the stutter on the first ~30s of playback.
+  // hls.js config — tuned per source kind.
+  //
+  // Provider (HiAnime) HLS is pre-transcoded and CDN-backed with a proper ABR
+  // ladder. The old config forced startLevel 0 + a 1 Mbps estimate, which
+  // pinned playback to the ugliest variant even on fibre and never let ABR
+  // ramp up. We now let hls.js auto-select the start level and give it a
+  // realistic bandwidth estimate so it scales up quickly.
+  //
+  // Real-Debrid's transcode returns a single-quality playlist (we already
+  // picked 720p server-side), so ABR settings are moot there. What matters is
+  // maximising forward buffer to absorb transcode hiccups and retrying hard
+  // when RD drops a segment (which it does frequently).
   const onProviderChange = useCallback((provider: MediaProviderAdapter | null) => {
-    if (isHLSProvider(provider)) {
+    if (!isHLSProvider(provider)) return;
+
+    if (sourceKindRef.current === 'provider') {
       provider.config = {
-        // Bitrate selection — bias hard toward the lowest variant.
-        startLevel: 0, // begin at the lowest bitrate, not the highest
+        startLevel: -1, // auto-select based on measured bandwidth
         capLevelToPlayerSize: true, // never load levels bigger than the <video>
-        autoLevelCapping: -1,
-        abrEwmaDefaultEstimate: 1_000_000, // 1 Mbps estimate keeps ABR low
-        // Buffer ahead so seeks survive RD's transcode hiccups.
+        abrEwmaDefaultEstimate: 5_000_000, // 5 Mbps — optimistic startup
         maxBufferLength: 60,
-        maxMaxBufferLength: 180,
+        maxMaxBufferLength: 120,
         backBufferLength: 30,
-        // Aggressive retries — RD frequently hiccups on individual segments.
         maxFragLookUpTolerance: 0.5,
         fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 500,
         manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 500,
         levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 500,
       };
+      return;
     }
+
+    // Real-Debrid live transcode — single quality, so ABR is irrelevant.
+    // Focus on buffer depth and resilient retries.
+    provider.config = {
+      startLevel: -1,
+      capLevelToPlayerSize: true,
+      abrEwmaDefaultEstimate: 2_000_000,
+      maxBufferLength: 90, // larger buffer rides out RD transcode stalls
+      maxMaxBufferLength: 180,
+      backBufferLength: 30,
+      maxFragLookUpTolerance: 0.5,
+      fragLoadingMaxRetry: 8, // RD drops segments often — retry aggressively
+      fragLoadingRetryDelay: 1000,
+      manifestLoadingMaxRetry: 6,
+      manifestLoadingRetryDelay: 1000,
+      levelLoadingMaxRetry: 6,
+      levelLoadingRetryDelay: 1000,
+    };
   }, []);
 
   // Whenever a (new) source actually starts playing, remember its release

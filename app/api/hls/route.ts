@@ -52,7 +52,11 @@ export async function GET(req: Request) {
   const referer = sp.get('ref') ?? undefined;
   if (!target) return new Response('Missing url', { status: 400, headers: CORS });
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    // Some CDNs (e.g. HiAnime's) 403 the default fetch UA — send a real one.
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  };
   if (referer) {
     headers['Referer'] = referer;
     try {
@@ -89,10 +93,17 @@ export async function GET(req: Request) {
   }
 
   // Stream segments / keys straight through, preserving range semantics.
+  // Segments are immutable (keyed by URI) — cache them at every layer (browser,
+  // Vercel edge, CDN) so seeks and replays don't re-fetch through the proxy.
+  // This is the single biggest perf win: without it, every .ts/.m4s segment
+  // round-trips through the server with no caching, causing stutter under load.
   const passthrough: Record<string, string> = { ...CORS };
   for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
     const v = upstream.headers.get(h);
     if (v) passthrough[h] = v;
+  }
+  if (upstream.ok) {
+    passthrough['Cache-Control'] = 'public, max-age=86400, immutable';
   }
   return new Response(upstream.body, { status: upstream.status, headers: passthrough });
 }

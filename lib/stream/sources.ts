@@ -467,25 +467,24 @@ function deepFindUrl(obj: unknown, re: RegExp): string | null {
 }
 
 /**
- * Pick the LOWEST-quality URL from Real-Debrid's transcode response.
+ * Pick the smoothest-quality URL from Real-Debrid's transcode response.
  *
  * The response is shaped like `{ "full": "...1080p.m3u8", "1080": ..., "720":
- * ..., "480": ... }` — `Object.values()` returns the highest-quality first,
- * which is why we used to always serve 1080p. We instead probe known low-
- * quality keys first, then sniff URL paths for resolution hints, then fall
- * back to anything that isn't the "full" / "1080" / "2160" variant. Stuttering
- * was happening because RD was transcoding the source file to 1080p in real
- * time even when we wanted lower; this asks for a smaller pre-encoded variant.
+ * ..., "480": ... }`. 1080p/2160p stutter under RD's live transcoder; 480p
+ * looks rough. 720p is the sweet spot — light enough for RD to transcode in
+ * real time, good enough to actually watch. Falls back to 480p if 720p isn't
+ * offered, then to anything that isn't the "full"/"1080"/"2160" variant.
  */
-function pickLowestQualityUrl(container: unknown, re: RegExp): string | null {
+function pickSmoothestQualityUrl(container: unknown, re: RegExp): string | null {
   if (!container) return null;
   if (typeof container === 'string') return re.test(container) ? container : null;
   if (typeof container !== 'object') return null;
 
   const entries = Object.entries(container as Record<string, unknown>);
 
-  // 1. Named low-quality keys first. RD typically uses bare numerics.
-  for (const wanted of ['480', '720', '360', '240', '420p', '480p', '720p', 'low', 'med']) {
+  // 1. Named keys — prefer 720p (good quality / light transcode) over 480p.
+  //    1080p/2160p are excluded; they stutter under RD's live transcoder.
+  for (const wanted of ['720', '720p', '480', '480p', '360', '240', 'low', 'med']) {
     const hit = entries.find(([k]) => k.toLowerCase() === wanted.toLowerCase());
     if (hit) {
       const url = deepFindUrl(hit[1], re);
@@ -493,10 +492,14 @@ function pickLowestQualityUrl(container: unknown, re: RegExp): string | null {
     }
   }
 
-  // 2. Any URL with a low-quality marker in its path.
+  // 2. Any URL with a 720p marker in its path, then any lower-quality marker.
   for (const [, v] of entries) {
     const url = deepFindUrl(v, re);
-    if (url && /\b(360|480|720)\b|\b(low|med)\b/i.test(url)) return url;
+    if (url && /\b720\b/i.test(url)) return url;
+  }
+  for (const [, v] of entries) {
+    const url = deepFindUrl(v, re);
+    if (url && /\b(360|480)\b|\b(low|med)\b/i.test(url)) return url;
   }
 
   // 3. Anything that isn't the explicit "high quality" key.
@@ -546,19 +549,15 @@ export async function resolvePlayable(
     if (!res.ok) return { url: finalUrl, hls: false };
     const t = await res.json();
 
-    // Pick the LOWEST pre-encoded variant available — RD pre-renders multiple
-    // bitrates ("full"/"1080"/"720"/"480") and we want the smallest one for
-    // smoothness. Progressive MP4 wins over HLS when present: no segment
-    // alignment overhead, real byte-range seeking, no adaptive logic at all.
-    const mp4 = pickLowestQualityUrl(t?.liveMP4, /^https?:/i);
+    // Pick the smoothest pre-encoded variant from RD's response (720p preferred).
+    // Keep HLS as the primary playback path (proven to work in the browser);
+    // liveMP4 stays as the fallback if HLS fails. The previous attempt to
+    // prefer liveMP4 outright broke playback — RD's liveMP4 URLs may not be
+    // directly playable as <video src> in all cases.
+    const hls = pickSmoothestQualityUrl(t?.apple, /\.m3u8/i);
+    const mp4 = pickSmoothestQualityUrl(t?.liveMP4, /^https?:/i);
+    if (hls) return { url: hls, hls: true, mp4Fallback: mp4 ?? undefined };
     if (mp4) return { url: mp4, hls: false };
-
-    const hls = pickLowestQualityUrl(t?.apple, /\.m3u8/i);
-    if (hls) {
-      // Keep the (possibly higher-quality) mp4 as a fallback if HLS fails.
-      const mp4Fallback = deepFindUrl(t?.liveMP4, /^https?:/i) ?? undefined;
-      return { url: hls, hls: true, mp4Fallback };
-    }
     return { url: finalUrl, hls: false };
   } catch {
     return { url: finalUrl, hls: false };
