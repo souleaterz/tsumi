@@ -2,6 +2,10 @@ appId: com.tsumi.desktop
 productName: Tsumi
 copyright: Tsumi
 
+# The shell uses no native npm modules, so don't rebuild the project's deps
+# against Electron headers (avoids slow/failing node-gyp builds in CI).
+npmRebuild: false
+
 directories:
   output: dist-app
   buildResources: electron/resources
