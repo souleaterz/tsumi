@@ -1,6 +1,6 @@
 {
   "name": "tsumi-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Tsumi desktop shell — native mpv playback + built-in WebTorrent streaming.",
   "author": "Tsumi",
   "license": "UNLICENSED",
