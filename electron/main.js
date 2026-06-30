@@ -14,7 +14,7 @@
 
 const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
-const { playMpv, stopMpv, onMpvProgress } = require('./mpv');
+const { playMpv, stopMpv, seekMpv, onMpvProgress } = require('./mpv');
 
 // The site the shell wraps.
 //  • Packaged app  → your hosted Vercel deployment (PROD_URL below).
@@ -37,6 +37,11 @@ if (!gotLock) {
 } else {
   let mainWindow = null;
   let pendingDeepLink = null;
+  // Borderless child window that hosts the embedded mpv video surface, plus the
+  // last stage rectangle (renderer CSS pixels) so we can re-place it when the
+  // main window moves / resizes.
+  let videoWin = null;
+  let lastVideoRect = null;
 
   // No native application menu — the frameless window has our own title bar.
   Menu.setApplicationMenu(null);
@@ -103,6 +108,64 @@ if (!gotLock) {
     navigateDeepLink(url);
   });
 
+  // ── Embedded mpv video surface ──────────────────────────────────────────
+  // mpv renders into this borderless child window (passed as --wid). We float
+  // it over the watch page's "stage" div and keep it aligned as the window
+  // moves / resizes / scrolls, so the player feels part of the page.
+
+  // Convert the OS window handle into the integer mpv's --wid expects.
+  function widForVideoWindow() {
+    if (!videoWin) return null;
+    const buf = videoWin.getNativeWindowHandle();
+    // Windows/Linux x64: handle is a pointer-sized little-endian integer.
+    try {
+      return buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : String(buf.readUInt32LE(0));
+    } catch {
+      return null;
+    }
+  }
+
+  function ensureVideoWindow() {
+    if (videoWin && !videoWin.isDestroyed()) return videoWin;
+    videoWin = new BrowserWindow({
+      parent: mainWindow,
+      frame: false,
+      show: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      backgroundColor: '#000000',
+      // No web content — this is purely an mpv render host.
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    videoWin.on('closed', () => {
+      videoWin = null;
+    });
+    return videoWin;
+  }
+
+  // Position the video window over the stage. `rect` is in renderer CSS pixels
+  // relative to the main window's content area; convert to screen coordinates.
+  function placeVideoWindow(rect) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (rect) lastVideoRect = rect;
+    const r = lastVideoRect;
+    if (!videoWin || videoWin.isDestroyed() || !r) return;
+    const content = mainWindow.getContentBounds();
+    const x = Math.round(content.x + r.x);
+    const y = Math.round(content.y + r.y);
+    const width = Math.max(1, Math.round(r.width));
+    const height = Math.max(1, Math.round(r.height));
+    videoWin.setBounds({ x, y, width, height });
+  }
+
+  function hideVideoWindow() {
+    if (videoWin && !videoWin.isDestroyed()) videoWin.hide();
+  }
+
   function createWindow() {
     mainWindow = new BrowserWindow({
       width: 1280,
@@ -130,13 +193,21 @@ if (!gotLock) {
     mainWindow.loadURL(pendingDeepLink || initialUrl());
     pendingDeepLink = null;
 
-    // Keep the renderer's title-bar maximize/restore icon in sync.
-    mainWindow.on('maximize', () =>
-      mainWindow.webContents.send('window:maximized', true),
-    );
-    mainWindow.on('unmaximize', () =>
-      mainWindow.webContents.send('window:maximized', false),
-    );
+    // Keep the renderer's title-bar maximize/restore icon in sync, and keep the
+    // embedded video aligned to the stage as the window changes.
+    mainWindow.on('maximize', () => {
+      mainWindow.webContents.send('window:maximized', true);
+      placeVideoWindow();
+    });
+    mainWindow.on('unmaximize', () => {
+      mainWindow.webContents.send('window:maximized', false);
+      placeVideoWindow();
+    });
+    mainWindow.on('move', () => placeVideoWindow());
+    mainWindow.on('resize', () => placeVideoWindow());
+    // Hide the embedded video when the app is minimised so it doesn't linger.
+    mainWindow.on('minimize', () => hideVideoWindow());
+    mainWindow.on('restore', () => placeVideoWindow());
 
     // Open external links (sign-in providers, real-debrid.com, etc.) in the
     // system browser rather than inside the app shell.
@@ -149,14 +220,18 @@ if (!gotLock) {
     });
 
     // Forward mpv playback progress to the renderer so it can persist watch
-    // history through the existing saveProgress path.
+    // history through the existing saveProgress path. Hide the video host when
+    // playback ends so the page's own placeholder shows again.
     onMpvProgress((p) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('mpv:progress', p);
       }
+      if (p && p.ended) hideVideoWindow();
     });
 
     mainWindow.on('closed', () => {
+      if (videoWin && !videoWin.isDestroyed()) videoWin.destroy();
+      videoWin = null;
       mainWindow = null;
     });
   }
@@ -170,19 +245,36 @@ if (!gotLock) {
   });
   ipcMain.on('window:close', () => mainWindow && mainWindow.close());
 
-  // Renderer asks us to play a direct media URL in mpv.
+  // ── Embedded video placement ──
+  ipcMain.on('video:bounds', (_evt, rect) => placeVideoWindow(rect));
+  ipcMain.on('video:hide', () => hideVideoWindow());
+
+  // Renderer asks us to play a direct media URL in the embedded mpv surface.
   ipcMain.handle('mpv:play', async (_evt, { url, opts }) => {
     try {
-      await playMpv(url, opts || {});
+      const o = opts || {};
+      // Spin up / position the embedded video host before mpv launches.
+      ensureVideoWindow();
+      if (o.bounds) placeVideoWindow(o.bounds);
+      if (videoWin && !videoWin.isDestroyed()) videoWin.showInactive();
+      const wid = widForVideoWindow();
+      await playMpv(url, { ...o, wid });
+      // Re-assert position once mpv has taken over the surface.
+      placeVideoWindow();
       return { ok: true };
     } catch (err) {
+      hideVideoWindow();
       return { ok: false, error: err && err.message ? err.message : String(err) };
     }
   });
 
-  // Renderer asks us to stop mpv (user chose to watch in-window instead).
+  // Seek the running mpv instance (Skip Intro button).
+  ipcMain.on('mpv:seek', (_evt, seconds) => seekMpv(seconds));
+
+  // Renderer asks us to stop mpv (leaving the page, switching away).
   ipcMain.handle('mpv:stop', () => {
     stopMpv();
+    hideVideoWindow();
     return { ok: true };
   });
 

@@ -139,6 +139,8 @@ export default async function WatchPage({ params, searchParams }: Props) {
         sources={availableSources}
         isPro={isPro}
         preferDub={audioPref === 'dub'}
+        idMal={media.idMal ?? undefined}
+        durationSec={media.duration ? media.duration * 60 : undefined}
       />
 
       {/* Title + nav */}

@@ -11,10 +11,12 @@
 const { spawn } = require('child_process');
 const net = require('net');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 let child = null; // current mpv process
 let ipc = null; // current IPC socket
+let chaptersFile = null; // temp ffmetadata file for the current playback
 const progressCbs = [];
 
 // Windows named pipe mpv listens on. (mpv accepts a plain name; Node needs the
@@ -26,6 +28,55 @@ const PIPE_PATH =
 /** Subscribe to { position, duration, ended } updates. */
 function onMpvProgress(cb) {
   progressCbs.push(cb);
+}
+
+/**
+ * Write the AniSkip-derived chapters to a temporary FFMETADATA file so mpv's
+ * seek bar shows intro/outro markers (`--chapters-file`). Each chapter's START
+ * becomes a notch on the OSC seek bar. Returns the file path, or null.
+ * `chapters`: [{ start: seconds, end: seconds, title }]
+ */
+function writeChaptersFile(chapters) {
+  if (!Array.isArray(chapters) || chapters.length === 0) return null;
+  let out = ';FFMETADATA1\n';
+  for (const c of chapters) {
+    if (typeof c.start !== 'number' || typeof c.end !== 'number') continue;
+    out += '[CHAPTER]\nTIMEBASE=1/1000\n';
+    out += `START=${Math.max(0, Math.round(c.start * 1000))}\n`;
+    out += `END=${Math.max(0, Math.round(c.end * 1000))}\n`;
+    out += `title=${String(c.title || 'Chapter').replace(/\n/g, ' ')}\n`;
+  }
+  try {
+    const file = path.join(os.tmpdir(), `tsumi-chapters-${Date.now()}.ffmeta`);
+    fs.writeFileSync(file, out, 'utf8');
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+function cleanupChaptersFile() {
+  if (chaptersFile) {
+    try {
+      fs.unlinkSync(chaptersFile);
+    } catch {
+      /* ignore */
+    }
+    chaptersFile = null;
+  }
+}
+
+/** Seek the running mpv instance to an absolute position (seconds). */
+function seekMpv(seconds) {
+  if (!ipc || typeof seconds !== 'number') return;
+  try {
+    ipc.write(
+      JSON.stringify({ command: ['set_property', 'time-pos', Math.max(0, seconds)] }) +
+        '\n',
+    );
+  } catch {
+    /* ignore */
+  }
 }
 function emit(p) {
   for (const cb of progressCbs) {
@@ -155,9 +206,6 @@ function playMpv(url, opts = {}) {
     const args = [
       `--input-ipc-server=${process.platform === 'win32' ? PIPE_NAME : PIPE_PATH}`,
       '--force-window=immediate',
-      // Start playback in true fullscreen — the desktop app's whole point is an
-      // immersive, chrome-free native player.
-      '--fullscreen',
       '--keep-open=no',
       '--really-quiet',
       '--hwdec=auto-safe',
@@ -165,7 +213,24 @@ function playMpv(url, opts = {}) {
       // Generous network buffering for RD's CDN.
       '--demuxer-max-bytes=200MiB',
       '--demuxer-readahead-secs=60',
+      // Keep mpv's on-screen controller (seek bar + chapter markers) visible.
+      '--osc=yes',
     ];
+
+    // Embedded mode: render INTO the Electron child window (--wid) so the player
+    // is part of the app UI. Without a wid we fall back to mpv's own fullscreen
+    // window (e.g. on platforms where embedding isn't wired up).
+    if (opts.wid) {
+      args.push(`--wid=${opts.wid}`);
+    } else {
+      args.push('--fullscreen');
+    }
+
+    // AniSkip intro/outro markers → chapters on the seek bar.
+    cleanupChaptersFile();
+    chaptersFile = writeChaptersFile(opts.chapters);
+    if (chaptersFile) args.push(`--chapters-file=${chaptersFile}`);
+
     if (opts.title) args.push(`--title=${opts.title}`, `--force-media-title=${opts.title}`);
     if (opts.startAt && opts.startAt > 0) args.push(`--start=+${Math.floor(opts.startAt)}`);
     for (const sub of opts.subtitles || []) {
@@ -202,6 +267,7 @@ function playMpv(url, opts = {}) {
         }
         ipc = null;
       }
+      cleanupChaptersFile();
       emit({ position: 0, duration: 0, ended: true });
     });
   });
@@ -231,6 +297,7 @@ function stopMpv() {
     }
     child = null;
   }
+  cleanupChaptersFile();
 }
 
-module.exports = { playMpv, stopMpv, onMpvProgress };
+module.exports = { playMpv, stopMpv, seekMpv, onMpvProgress };

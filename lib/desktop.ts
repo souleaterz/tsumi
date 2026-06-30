@@ -12,12 +12,24 @@
 // thin, type-safe wrapper the React UI calls.
 // ─────────────────────────────────────────────────────────────
 
+/** A position rectangle in renderer CSS pixels relative to the window content. */
+export interface VideoRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface MpvPlayOptions {
   title?: string;
   /** Resume position in seconds. */
   startAt?: number;
   /** External subtitle file URLs (.vtt/.srt) mpv should load. */
   subtitles?: string[];
+  /** Where to place the embedded video surface at launch. */
+  bounds?: VideoRect;
+  /** Chapters for the seek bar (AniSkip intro/outro markers). */
+  chapters?: { start: number; end: number; title: string }[];
 }
 
 export interface MpvProgress {
@@ -37,6 +49,14 @@ interface TsumiDesktopBridge {
   stopMpv(): Promise<{ ok: boolean }>;
   /** Subscribe to playback progress from the running mpv instance. */
   onProgress(cb: (p: MpvProgress) => void): () => void;
+
+  // ── Embedded video surface ──
+  /** Re-place the embedded video over the stage (CSS-pixel rect). */
+  setVideoBounds(rect: VideoRect): void;
+  /** Hide the embedded video surface. */
+  hideVideo(): void;
+  /** Seek the running mpv instance to an absolute position (seconds). */
+  mpvSeek(seconds: number): void;
 
   // ── Frameless window controls ──
   /** Minimise the app window. */

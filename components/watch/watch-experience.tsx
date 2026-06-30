@@ -19,6 +19,10 @@ interface Props {
   sources: StreamSource[];
   isPro?: boolean;
   preferDub?: boolean;
+  /** MyAnimeList id — used to fetch AniSkip intro/outro times (desktop). */
+  idMal?: number | null;
+  /** Episode runtime in seconds — improves AniSkip matching + end detection. */
+  durationSec?: number;
 }
 
 /**
@@ -32,7 +36,12 @@ interface Props {
  * Either way we look up any saved position so playback resumes where the
  * viewer left off.
  */
-export function WatchExperience({ isPro = false, ...playerProps }: Props) {
+export function WatchExperience({
+  isPro = false,
+  idMal,
+  durationSec,
+  ...playerProps
+}: Props) {
   const [adDone, setAdDone] = useState(isPro);
   const [startAt, setStartAt] = useState(0);
   const { userId, isLoaded } = useUserId();
@@ -56,7 +65,15 @@ export function WatchExperience({ isPro = false, ...playerProps }: Props) {
   }
 
   if (mode === 'desktop') {
-    return <DesktopWatch {...playerProps} userId={userId} startAt={startAt} />;
+    return (
+      <DesktopWatch
+        {...playerProps}
+        idMal={idMal}
+        durationSec={durationSec}
+        userId={userId}
+        startAt={startAt}
+      />
+    );
   }
 
   if (!adDone) {

@@ -7,11 +7,22 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('tsumiDesktop', {
   version: process.env.npm_package_version || '0.1.0',
 
-  // Launch mpv on a direct media URL. Returns { ok, error? }.
+  // Launch mpv on a direct media URL (embedded in the app window). The opts may
+  // carry { bounds, chapters, ... }. Returns { ok, error? }.
   playInMpv: (url, opts) => ipcRenderer.invoke('mpv:play', { url, opts }),
 
   // Stop the running mpv instance.
   stopMpv: () => ipcRenderer.invoke('mpv:stop'),
+
+  // Re-place the embedded video surface over the stage (CSS-pixel rect relative
+  // to the window content). Called on scroll / resize.
+  setVideoBounds: (rect) => ipcRenderer.send('video:bounds', rect),
+
+  // Hide the embedded video surface (e.g. when leaving the player).
+  hideVideo: () => ipcRenderer.send('video:hide'),
+
+  // Seek the running mpv instance to an absolute position in seconds.
+  mpvSeek: (seconds) => ipcRenderer.send('mpv:seek', seconds),
 
   // Subscribe to playback progress events from the running mpv instance.
   // Returns an unsubscribe function.
