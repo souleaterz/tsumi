@@ -37,6 +37,16 @@ interface TsumiDesktopBridge {
   stopMpv(): Promise<{ ok: boolean }>;
   /** Subscribe to playback progress from the running mpv instance. */
   onProgress(cb: (p: MpvProgress) => void): () => void;
+
+  // ── Frameless window controls ──
+  /** Minimise the app window. */
+  minimize(): void;
+  /** Toggle maximise / restore. */
+  toggleMaximize(): void;
+  /** Close the app window. */
+  closeWindow(): void;
+  /** Subscribe to maximise-state changes (for the control icon). Returns unsubscribe. */
+  onMaximizeChange(cb: (isMaximized: boolean) => void): () => void;
 }
 
 declare global {

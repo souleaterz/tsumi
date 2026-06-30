@@ -150,40 +150,6 @@ export default async function WatchPage({ params, searchParams }: Props) {
               {title}
               <span className="ml-3 text-accent">EP {ep}</span>
             </h1>
-            {/* Sub / Dub toggle (defaults to Dub) */}
-            <div className="flex items-center overflow-hidden rounded-md border border-white/10">
-              <Link
-                href={`/watch/${id}/${ep}?audio=sub`}
-                scroll={false}
-                className={`px-3 py-1.5 text-sm font-semibold transition ${
-                  audioPref === 'sub'
-                    ? 'bg-primary text-white'
-                    : 'bg-surface/60 text-zinc-300 hover:bg-surface'
-                }`}
-              >
-                Sub
-              </Link>
-              {hasDub ? (
-                <Link
-                  href={`/watch/${id}/${ep}?audio=dub`}
-                  scroll={false}
-                  className={`px-3 py-1.5 text-sm font-semibold transition ${
-                    audioPref === 'dub'
-                      ? 'bg-primary text-white'
-                      : 'bg-surface/60 text-zinc-300 hover:bg-surface'
-                  }`}
-                >
-                  Dub
-                </Link>
-              ) : (
-                <span
-                  className="cursor-not-allowed px-3 py-1.5 text-sm font-semibold text-zinc-600"
-                  title="No dub available for this episode"
-                >
-                  Dub
-                </span>
-              )}
-            </div>
           </div>
           {epInfo?.title && (
             <p className="mt-1 text-zinc-400">{epInfo.title}</p>

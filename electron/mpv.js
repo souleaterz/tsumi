@@ -155,6 +155,9 @@ function playMpv(url, opts = {}) {
     const args = [
       `--input-ipc-server=${process.platform === 'win32' ? PIPE_NAME : PIPE_PATH}`,
       '--force-window=immediate',
+      // Start playback in true fullscreen — the desktop app's whole point is an
+      // immersive, chrome-free native player.
+      '--fullscreen',
       '--keep-open=no',
       '--really-quiet',
       '--hwdec=auto-safe',

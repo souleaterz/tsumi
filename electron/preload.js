@@ -20,4 +20,15 @@ contextBridge.exposeInMainWorld('tsumiDesktop', {
     ipcRenderer.on('mpv:progress', handler);
     return () => ipcRenderer.removeListener('mpv:progress', handler);
   },
+
+  // ── Frameless window controls (our React title bar calls these) ──
+  minimize: () => ipcRenderer.send('window:minimize'),
+  toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+  closeWindow: () => ipcRenderer.send('window:close'),
+  // Notifies when the OS maximize state changes (icon swap). Returns unsubscribe.
+  onMaximizeChange: (cb) => {
+    const handler = (_evt, isMax) => cb(isMax);
+    ipcRenderer.on('window:maximized', handler);
+    return () => ipcRenderer.removeListener('window:maximized', handler);
+  },
 });

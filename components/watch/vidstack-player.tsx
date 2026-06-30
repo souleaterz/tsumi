@@ -15,11 +15,9 @@ import {
   defaultLayoutIcons,
   DefaultVideoLayout,
 } from '@vidstack/react/player/layouts/default';
-import { Loader2, AlertCircle, Wifi, MonitorPlay } from 'lucide-react';
+import { Loader2, AlertCircle, Wifi } from 'lucide-react';
 import type { StreamSource } from '@/lib/stream/sources';
 import { saveProgress } from '@/lib/progress';
-import { DesktopPlay } from './desktop-play';
-import { desktop } from '@/lib/desktop';
 import {
   loadSourcePref,
   pickPreferredIndex,
@@ -85,9 +83,6 @@ export function VidstackPlayer({
   // Most recently saved source index for this episode; updates if the user
   // switches sources mid-episode so we remember their final choice.
   const lastSavedIdxRef = useRef<number>(-1);
-  // Desktop app only: true while a native mpv window is playing this episode.
-  // We pause the in-window player and show an overlay so audio doesn't double.
-  const [mpvActive, setMpvActive] = useState(false);
 
   // ── Resolve the magnet → streamURL via the service-worker server ──
   useEffect(() => {
@@ -215,33 +210,6 @@ export function VidstackPlayer({
       destroyed = true;
     };
   }, [sourceIdx, sources, prefChecked]);
-
-  // When mpv takes over (desktop), pause the in-window player so we don't play
-  // the same episode twice. Stops when mpv reports it ended (overlay clears).
-  useEffect(() => {
-    if (mpvActive) {
-      try {
-        playerRef.current?.pause();
-      } catch {
-        /* player not ready */
-      }
-    }
-  }, [mpvActive]);
-
-  // "Watch here instead" — stop the mpv window and resume in-window playback.
-  const returnToWindow = useCallback(async () => {
-    try {
-      await desktop()?.stopMpv();
-    } catch {
-      /* ignore */
-    }
-    setMpvActive(false);
-    try {
-      await playerRef.current?.play();
-    } catch {
-      /* autoplay may be blocked; user can press play */
-    }
-  }, []);
 
   // Tear down the client on unmount.
   useEffect(() => {
@@ -502,19 +470,6 @@ export function VidstackPlayer({
 
   return (
     <>
-      {/* Desktop shell only: play the raw file in native mpv (no transcode). */}
-      <DesktopPlay
-        anilistId={anilistId}
-        episode={episode}
-        title={title}
-        coverImage={coverImage}
-        totalEpisodes={totalEpisodes}
-        sourceTitle={active?.title}
-        startAt={startAt}
-        subtitles={subtitles}
-        userId={userId}
-        onActiveChange={setMpvActive}
-      />
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-black shadow-glow-lg">
         {src && (
         <MediaPlayer
@@ -588,23 +543,6 @@ export function VidstackPlayer({
               <p className="katakana text-[10px]">ストリーミング準備中</p>
             </>
           )}
-        </div>
-      )}
-
-      {/* Playing-in-app overlay (desktop) — covers the paused in-window player
-          while the native mpv window has playback. */}
-      {mpvActive && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-base/95 text-center">
-          <MonitorPlay className="h-10 w-10 text-accent" />
-          <p className="text-sm font-semibold text-white">Playing in the app window</p>
-          <p className="max-w-xs px-4 text-xs text-zinc-400">
-            This episode is playing smoothly in the native player. Paused here to
-            avoid double audio.
-          </p>
-          <button onClick={returnToWindow} className="btn-ghost mt-1 text-sm">
-            Watch here instead
-          </button>
-          <span className="katakana text-[10px]">アプリで再生中</span>
         </div>
       )}
 

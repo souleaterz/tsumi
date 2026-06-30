@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import type { StreamSource } from '@/lib/stream/sources';
 import { VidstackPlayer } from './vidstack-player';
+import { DesktopWatch } from './desktop-watch';
+import { AppPromoBar } from './app-promo-bar';
 import { PreRollAd } from './preroll-ad';
 import { getEpisodeProgress } from '@/lib/progress';
 import { useUserId } from '@/lib/auth/use-user-id';
+import { isDesktop } from '@/lib/desktop';
 
 interface Props {
   anilistId: number;
@@ -19,14 +22,25 @@ interface Props {
 }
 
 /**
- * Orchestrates the watch flow: free-tier users get a pre-roll ad gate,
- * Pro users go straight to the player. Looks up any saved position so
- * playback resumes where the viewer left off.
+ * Orchestrates the watch flow and splits the two products:
+ *
+ *  • Desktop app → native Stremio-style source picker that plays in mpv
+ *    (smooth, no transcode). No pre-roll gate; playback is native.
+ *  • Website → pre-roll ad gate (free tier) then the in-browser player, with a
+ *    banner nudging viewers to the smoother desktop app.
+ *
+ * Either way we look up any saved position so playback resumes where the
+ * viewer left off.
  */
 export function WatchExperience({ isPro = false, ...playerProps }: Props) {
   const [adDone, setAdDone] = useState(isPro);
   const [startAt, setStartAt] = useState(0);
   const { userId, isLoaded } = useUserId();
+  // null until mounted — avoids SSR/first-paint mismatch and a flash of the
+  // browser player inside the desktop shell.
+  const [mode, setMode] = useState<'web' | 'desktop' | null>(null);
+
+  useEffect(() => setMode(isDesktop() ? 'desktop' : 'web'), []);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -35,9 +49,24 @@ export function WatchExperience({ isPro = false, ...playerProps }: Props) {
     });
   }, [playerProps.anilistId, playerProps.episode, isLoaded, userId]);
 
+  if (mode === null) {
+    return (
+      <div className="aspect-video w-full animate-pulse rounded-xl border border-white/10 bg-surface/40" />
+    );
+  }
+
+  if (mode === 'desktop') {
+    return <DesktopWatch {...playerProps} userId={userId} startAt={startAt} />;
+  }
+
   if (!adDone) {
     return <PreRollAd onComplete={() => setAdDone(true)} />;
   }
 
-  return <VidstackPlayer {...playerProps} userId={userId} startAt={startAt} />;
+  return (
+    <>
+      <AppPromoBar anilistId={playerProps.anilistId} episode={playerProps.episode} />
+      <VidstackPlayer {...playerProps} userId={userId} startAt={startAt} />
+    </>
+  );
 }

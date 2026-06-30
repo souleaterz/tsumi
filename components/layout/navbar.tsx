@@ -21,7 +21,10 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/5 bg-base/70 backdrop-blur-xl">
+    <header
+      className="sticky z-50 border-b border-white/5 bg-base/70 backdrop-blur-xl"
+      style={{ top: 'var(--tsumi-nav-top, 0px)' }}
+    >
       <nav className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
         {/* Logo */}
         <Link href="/" className="group flex items-center gap-2">
