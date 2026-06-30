@@ -11,6 +11,7 @@ import { getUserRdKey } from '@/lib/settings';
 import { getEpisodeSubs } from '@/lib/subs';
 import { WatchExperience } from '@/components/watch/watch-experience';
 import { NeedsKeyBanner } from '@/components/watch/needs-key-banner';
+import { SourceModeToggle } from '@/components/watch/source-mode-toggle';
 import { EpisodeNav } from '@/components/watch/episode-nav';
 import { AdSlot } from '@/components/ui/ad-slot';
 
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 interface Props {
   params: { id: string; ep: string };
-  searchParams: { audio?: string };
+  searchParams: { audio?: string; source?: string };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -43,10 +44,23 @@ export default async function WatchPage({ params, searchParams }: Props) {
   ]);
   if (!media) notFound();
 
-  // BYO-key: reliable streaming needs the user's own Real-Debrid key. Without
-  // it (and without the provider), Torrentio only yields WebTorrent magnets,
-  // which rarely play — so prompt the user to add their key.
-  const needsKey = !rdKey && !isProviderEnabled;
+  // Source mode: Real-Debrid (resolved HTTPS) vs Torrentio (raw torrent/magnet).
+  //  • RD is only available when the user has their OWN key on their profile.
+  //  • The user can toggle to Torrentio (?source=torrent) even with a key —
+  //    e.g. their RD subscription lapsed. Torrentio magnets only PLAY in the
+  //    desktop app (the browser can't peer with public swarms); the website
+  //    shows them but needs the app to play.
+  const hasRdKey = Boolean(rdKey);
+  const sourceMode: 'rd' | 'torrent' =
+    hasRdKey && searchParams.source !== 'torrent' ? 'rd' : 'torrent';
+  // Only pass the RD key down the pipeline when RD mode is active.
+  const effectiveRdKey = sourceMode === 'rd' ? rdKey ?? undefined : undefined;
+
+  // BYO-key: in-browser playback needs the user's own Real-Debrid key. Without
+  // it (and without the provider), Torrentio only yields magnets, which the
+  // website can't play — prompt the user to add their key (hidden on desktop,
+  // which streams magnets natively).
+  const needsKey = sourceMode === 'torrent' && !hasRdKey && !isProviderEnabled;
 
   // English subtitles via OpenSubtitles (opt-in, gated by OPENSUBTITLES_API_KEY).
   // Routed through /api/sub for CORS + SRT→VTT conversion.
@@ -60,10 +74,10 @@ export default async function WatchPage({ params, searchParams }: Props) {
   const title = bestTitle(media.title);
   const romaji = media.title.romaji || media.title.english || undefined;
   // Romaji title gives the Nyaa fallback the best chance of matching releases.
-  let resolved = await resolveStreams(id, ep, romaji, wantDub, rdKey ?? undefined);
+  let resolved = await resolveStreams(id, ep, romaji, wantDub, effectiveRdKey);
   // If defaulting to dub found nothing (e.g. provider has no dub), fall to sub.
   if (resolved.length === 0 && wantDub && searchParams.audio !== 'dub') {
-    resolved = await resolveStreams(id, ep, romaji, false, rdKey ?? undefined);
+    resolved = await resolveStreams(id, ep, romaji, false, effectiveRdKey);
   }
 
   // Sanitise for the client: Real-Debrid sources carry a resolver URL with the
@@ -116,6 +130,14 @@ export default async function WatchPage({ params, searchParams }: Props) {
           a key via the embedded torrent client, so the banner hides itself there). */}
       {needsKey && <NeedsKeyBanner />}
 
+      {/* Source picker: Real-Debrid vs Torrentio. Only when the user has an RD
+          key — otherwise it's Torrentio-only and there's nothing to choose. */}
+      {hasRdKey && (
+        <div className="mb-3">
+          <SourceModeToggle mode={sourceMode} />
+        </div>
+      )}
+
       {/* Player */}
       <WatchExperience
         anilistId={id}
@@ -156,9 +178,9 @@ export default async function WatchPage({ params, searchParams }: Props) {
           <p className="text-xs text-zinc-600">
             {availableSources.length} stream source
             {availableSources.length > 1 ? 's' : ''} available · resolved via Torrentio
-            {rdKey
+            {sourceMode === 'rd'
               ? ', streamed over HTTPS via Real-Debrid.'
-              : ', streamed peer-to-peer via WebTorrent.'}
+              : ', streamed peer-to-peer via WebTorrent (desktop app).'}
           </p>
         )}
 

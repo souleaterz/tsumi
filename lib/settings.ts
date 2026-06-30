@@ -15,32 +15,26 @@ import { getSupabaseService } from './supabase/server';
 /**
  * Fetch the Real-Debrid key to use for this request.
  *
- * 1. The signed-in user's own stored key (the public, BYO-key path).
- * 2. Self-host fallback: a single `REALDEBRID_API_KEY` in the environment.
- *
- * The fallback is OFF unless that env var is set. It exists for a PERSONAL /
- * self-hosted copy (one operator, one key, no sign-in needed to test). Do NOT
- * set it on a public multi-user deployment — a shared key violates RD's ToS and
- * gets banned. There, leave it unset so every user supplies their own.
+ * STRICTLY the signed-in user's own key, set on their profile (BYO-key). There
+ * is NO environment fallback: Real-Debrid sources only ever load when the user
+ * has pasted their own key. This keeps a public, multi-user deployment honest —
+ * a shared `REALDEBRID_API_KEY` violates RD's ToS and gets the account banned —
+ * and means logged-out / keyless visitors get raw Torrentio sources instead of
+ * silently using someone else's RD account. (To test RD locally, sign in and
+ * add a key on your profile.)
  */
 export async function getUserRdKey(userId: string | null): Promise<string | null> {
-  if (userId) {
-    const db = getSupabaseService();
-    if (db) {
-      const { data, error } = await db
-        .from('user_settings')
-        .select('realdebrid_key')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (!error) {
-        const key = (data?.realdebrid_key ?? '').trim();
-        if (key.length > 0) return key;
-      }
-    }
-  }
-  // Self-host / local-testing fallback.
-  const envKey = (process.env.REALDEBRID_API_KEY ?? '').trim();
-  return envKey.length > 0 ? envKey : null;
+  if (!userId) return null;
+  const db = getSupabaseService();
+  if (!db) return null;
+  const { data, error } = await db
+    .from('user_settings')
+    .select('realdebrid_key')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return null;
+  const key = (data?.realdebrid_key ?? '').trim();
+  return key.length > 0 ? key : null;
 }
 
 /** Set (or clear, when key is null/empty) the user's Real-Debrid key. */
