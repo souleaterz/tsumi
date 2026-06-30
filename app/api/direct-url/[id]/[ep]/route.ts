@@ -1,17 +1,25 @@
 import { NextResponse } from 'next/server';
-import { resolveStreams, resolvePlayable } from '@/lib/stream/sources';
+import { resolveStreams, resolveFinalUrl } from '@/lib/stream/sources';
 import { currentUserId } from '@/lib/subscription';
 import { getUserRdKey } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/stream-url/:id/:ep?t=<source title>
+ * GET /api/direct-url/:id/:ep?t=<source title>
  *
- * Resolves the chosen source to a browser-playable stream server-side (so the
- * RD API key never reaches the browser). Returns `{ url, hls, mp4Fallback? }`:
- * mp4/webm files stream directly; mkv/other are transcoded by Real-Debrid to
- * HLS, with a progressive-MP4 fallback the player uses if HLS fails.
+ * Returns the **keyless, directly-playable Real-Debrid link** for a source —
+ * the raw container (usually .mkv) on RD's CDN, NOT a transcode.
+ *
+ * This is the desktop app's playback path: a native player (mpv) plays the raw
+ * mkv directly over HTTP byte-range, with no live transcoding — which is the
+ * whole reason the desktop build exists (it sidesteps RD's transcode wall that
+ * stutters the browser around 0:30). The browser path keeps using
+ * /api/stream-url (which transcodes mkv to HLS because browsers can't decode it).
+ *
+ * The RD API key is the signed-in user's own (BYO-key) and never leaves the
+ * server — `resolveFinalUrl` follows the resolver redirect here and we hand the
+ * client only the final keyless CDN URL.
  */
 export async function GET(
   req: Request,
@@ -35,18 +43,20 @@ export async function GET(
 
   const sources = await resolveStreams(anilistId, episode, undefined, false, rdKey);
   const match = sources.find((s) => s.title === sourceTitle && s.url);
-
   if (!match?.url) {
     return NextResponse.json({ error: 'Source no longer available' }, { status: 404 });
   }
 
-  const playable = await resolvePlayable(match.url, rdKey);
-  if (!playable) {
+  const finalUrl = await resolveFinalUrl(match.url);
+  if (!finalUrl) {
     return NextResponse.json(
       { error: 'Real-Debrid could not resolve this source (it may not be cached).' },
       { status: 502 },
     );
   }
 
-  return NextResponse.json(playable, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(
+    { url: finalUrl, container: match.quality ?? null },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }

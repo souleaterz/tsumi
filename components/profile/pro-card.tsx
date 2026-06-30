@@ -61,7 +61,7 @@ export function ProCard({ isPro = false }: { isPro?: boolean }) {
         </div>
         <p className="mt-2 text-3xl font-bold text-white">
           £0.99
-          <span className="text-base font-normal text-zinc-400">/month</span>
+          <span className="text-[1rem] font-normal text-zinc-400">/month</span>
         </p>
         <ul className="mt-4 space-y-2">
           {PRO_PERKS.map((p) => (

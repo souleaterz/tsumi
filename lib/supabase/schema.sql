@@ -43,6 +43,16 @@ create table if not exists public.subscriptions (
   updated_at           timestamptz not null default now()
 );
 
+-- Per-user settings. Holds each user's own Real-Debrid API key (BYO-key):
+-- a single shared key violates RD's ToS and gets banned at scale, so every
+-- user supplies their own from their profile. Stored server-side only and
+-- never returned to the client (the settings API reports presence, not value).
+create table if not exists public.user_settings (
+  user_id        text primary key,
+  realdebrid_key text,
+  updated_at     timestamptz not null default now()
+);
+
 create index if not exists watch_progress_user_updated
   on public.watch_progress (user_id, updated_at desc);
 create index if not exists watchlist_user
@@ -52,6 +62,7 @@ create index if not exists watchlist_user
 alter table public.watchlist        enable row level security;
 alter table public.watch_progress   enable row level security;
 alter table public.subscriptions    enable row level security;
+alter table public.user_settings    enable row level security;
 
 -- NOTE: RLS is enabled with NO policies, so direct client (anon-key) access is
 -- denied. Tsumi reads/writes these tables through server-side API routes

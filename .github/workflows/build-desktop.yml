@@ -1,0 +1,62 @@
+name: Build Tsumi Desktop (Windows)
+
+# Builds the Windows installer (.exe) for the Tsumi desktop app.
+#  • Push a tag like v0.1.0  → builds AND attaches the .exe to a GitHub Release.
+#  • Run manually (Actions tab → Run workflow) → builds and uploads the .exe as a
+#    downloadable artifact (no release).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write # needed to create/attach the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # mpv is the native player the app launches for smooth playback. We bundle
+      # the x86_64 (Intel/AMD) Windows build into the installer.
+      - name: Download mpv (x86_64)
+        shell: pwsh
+        run: |
+          $api = "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
+          $rel = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "tsumi-ci" }
+          $asset = $rel.assets |
+            Where-Object { $_.name -match '^mpv-x86_64-\d' -and $_.name -like '*.7z' } |
+            Select-Object -First 1
+          if (-not $asset) { throw "Could not find an mpv x86_64 .7z asset" }
+          Write-Host "Downloading $($asset.name)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile mpv.7z -Headers @{ "User-Agent" = "tsumi-ci" }
+          7z x mpv.7z -ompv-extract | Out-Null
+          New-Item -ItemType Directory -Force -Path electron/bin | Out-Null
+          $exe = Get-ChildItem -Recurse -Path mpv-extract -Filter mpv.exe | Select-Object -First 1
+          if (-not $exe) { throw "mpv.exe not found in archive" }
+          Copy-Item $exe.FullName electron/bin/mpv.exe -Force
+          Write-Host "Bundled mpv.exe ($([math]::Round((Get-Item electron/bin/mpv.exe).Length/1MB,1)) MB)"
+
+      - name: Build Windows installer
+        run: npx electron-builder --win --publish never
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsumi-windows-installer
+          path: dist-app/*.exe
+          if-no-files-found: error
+
+      - name: Attach installer to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-app/*.exe

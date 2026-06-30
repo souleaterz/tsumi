@@ -10,6 +10,7 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { useUserId } from '@/lib/auth/use-user-id';
 import { useWatchlist } from '@/components/watchlist-provider';
 import { ProCard } from './pro-card';
+import { RdKeyCard } from './rd-key-card';
 
 type Tab = 'watchlist' | 'history';
 
@@ -174,7 +175,8 @@ export function ProfileClient({ isPro = false }: { isPro?: boolean }) {
       </div>
 
       {/* Sidebar */}
-      <aside>
+      <aside className="space-y-6">
+        <RdKeyCard />
         <ProCard isPro={isPro} />
       </aside>
     </div>

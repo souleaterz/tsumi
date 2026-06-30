@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { resolveStreams } from '@/lib/stream/sources';
+import { currentUserId } from '@/lib/subscription';
+import { getUserRdKey } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +24,8 @@ export async function GET(
   }
 
   try {
-    const resolved = await resolveStreams(anilistId, episode, title);
+    const rdKey = (await getUserRdKey(await currentUserId())) ?? undefined;
+    const resolved = await resolveStreams(anilistId, episode, title, false, rdKey);
     // Strip the Real-Debrid resolver URL (it embeds the API key) and expose the
     // keyless /api/stream-url endpoint instead.
     const sources = resolved.map((s) => {

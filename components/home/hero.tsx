@@ -111,8 +111,14 @@ export function Hero({ items }: { items: AnilistMedia[] }) {
         </div>
 
         <p
-          className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-zinc-50 sm:text-base"
-          style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.95)' }}
+          className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-zinc-50 sm:text-[1.05rem]"
+          // Explicit color: Tailwind's `text-base` (used elsewhere for sizing)
+          // collides with our custom `base` COLOR, so we set it inline here to
+          // guarantee light text regardless of class-order cascade.
+          style={{
+            color: '#fafafa',
+            textShadow: '0 2px 12px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.95)',
+          }}
         >
           {truncate(stripHtml(media.description), 240)}
         </p>

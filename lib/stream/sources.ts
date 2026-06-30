@@ -5,10 +5,15 @@
 //   AniList ID ─Anizip→ Kitsu id ─Torrentio+RealDebrid→ direct HTTPS stream URL
 //   → Vidstack plays it natively. No WebTorrent / WebRTC needed.
 //
-// Fallback path (only when no REALDEBRID_API_KEY is set):
+// Fallback path (only when the user has no Real-Debrid key):
 //   Torrentio/Nyaa magnets → WebTorrent in the browser. NOTE: this only works
-//   for swarms with WebRTC peers, so it won't play most public torrents — set a
-//   Real-Debrid key for reliable playback.
+//   for swarms with WebRTC peers, so it won't play most public torrents — the
+//   user must add their own Real-Debrid key for reliable playback.
+//
+// BYO-key: Real-Debrid is no longer a single shared server key. Each signed-in
+// user supplies their own (stored per-user, see lib/settings.ts). The key is
+// passed in as `rdKey` to every function that talks to Torrentio/RD, so the
+// pipeline is stateless w.r.t. which user is streaming.
 // ─────────────────────────────────────────────────────────────
 
 import { getProviderStream, isProviderEnabled } from './provider';
@@ -17,9 +22,6 @@ const TORRENTIO_BASE =
   process.env.NEXT_PUBLIC_TORRENTIO_BASE || 'https://torrentio.strem.fun';
 const ANIZIP_BASE = process.env.NEXT_PUBLIC_ANIZIP_BASE || 'https://api.ani.zip';
 const NYAA_BASE = process.env.NEXT_PUBLIC_NYAA_BASE || 'https://nyaa.si';
-const RD_API_KEY = process.env.REALDEBRID_API_KEY;
-
-export const isDebridEnabled = Boolean(RD_API_KEY);
 
 export interface EpisodeMeta {
   /** Entry-local episode number — what Torrentio/Kitsu streams key off. */
@@ -214,6 +216,7 @@ function rankSources(streams: StreamSource[]): StreamSource[] {
 async function resolveTorrentio(
   anilistId: number,
   episode: number,
+  rdKey?: string,
 ): Promise<StreamSource[]> {
   const mapRes = await fetch(`${ANIZIP_BASE}/mappings?anilist_id=${anilistId}`, {
     next: { revalidate: 86400 },
@@ -223,11 +226,11 @@ async function resolveTorrentio(
   const kitsuId: number | undefined = map?.mappings?.kitsu_id;
   if (!kitsuId) return [];
 
-  // Insert the debrid config segment when a key is present.
-  const config = RD_API_KEY ? `/realdebrid=${RD_API_KEY}` : '';
+  // Insert the debrid config segment when the user supplied a key.
+  const config = rdKey ? `/realdebrid=${rdKey}` : '';
   const url = `${TORRENTIO_BASE}${config}/stream/series/kitsu:${kitsuId}:${episode}.json`;
-  // Don't cache the RD variant publicly — the URL embeds the secret key.
-  const res = await fetch(url, RD_API_KEY ? { cache: 'no-store' } : { next: { revalidate: 1800 } });
+  // Don't cache the RD variant publicly — the URL embeds the user's secret key.
+  const res = await fetch(url, rdKey ? { cache: 'no-store' } : { next: { revalidate: 1800 } });
   if (!res.ok) return [];
   const data = await res.json();
 
@@ -399,6 +402,7 @@ export async function resolveStreams(
   episode: number,
   title?: string,
   dub = false,
+  rdKey?: string,
 ): Promise<StreamSource[]> {
   try {
     if (isProviderEnabled) {
@@ -408,10 +412,12 @@ export async function resolveStreams(
     }
     // RD / Torrent path: serves sub, and dub via dual-audio releases whose
     // English track the player selects (see preferDub / selectPreferredAudio).
-    const torrentio = await resolveTorrentio(anilistId, episode);
+    // Without the user's RD key, Torrentio returns magnets (WebTorrent only).
+    const torrentio = await resolveTorrentio(anilistId, episode, rdKey);
     if (torrentio.length > 0) return rankSources(torrentio);
 
-    if (title && !isDebridEnabled) {
+    // Nyaa magnets aren't RD-resolvable, so only worth it without a key.
+    if (title && !rdKey) {
       const nyaa = await resolveNyaa(title, episode);
       if (nyaa.length > 0) return rankSources(nyaa);
     }
@@ -529,6 +535,7 @@ function pickSmoothestQualityUrl(container: unknown, re: RegExp): string | null 
  */
 export async function resolvePlayable(
   resolverUrl: string,
+  rdKey?: string,
 ): Promise<PlayableStream | null> {
   const finalUrl = await resolveFinalUrl(resolverUrl);
   if (!finalUrl) return null;
@@ -537,13 +544,13 @@ export async function resolvePlayable(
   if (BROWSER_CONTAINER.test(finalUrl)) return { url: finalUrl, hls: false };
 
   // Otherwise ask Real-Debrid to transcode it. The download id is the `/d/<id>/`
-  // segment of the unrestricted link.
+  // segment of the unrestricted link. Needs the user's own RD key.
   const id = finalUrl.match(/\/d\/([^/]+)/)?.[1];
-  if (!RD_API_KEY || !id) return { url: finalUrl, hls: false };
+  if (!rdKey || !id) return { url: finalUrl, hls: false };
 
   try {
     const res = await fetch(`${RD_BASE}/streaming/transcode/${id}`, {
-      headers: { Authorization: `Bearer ${RD_API_KEY}` },
+      headers: { Authorization: `Bearer ${rdKey}` },
       cache: 'no-store',
     });
     if (!res.ok) return { url: finalUrl, hls: false };

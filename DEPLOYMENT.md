@@ -115,23 +115,28 @@ reads it server-side so Pro users skip the pre-roll ad. (All quality tiers are f
 
 ---
 
-## 4b. Real-Debrid — REQUIRED for video playback
+## 4b. Real-Debrid — REQUIRED for video playback (BYO-key, per user)
 
 In-browser torrent streaming (WebTorrent) **cannot play most public anime torrents** —
 browsers only peer over WebRTC, and those swarms have none. Real-Debrid fixes this:
 Torrentio returns direct HTTPS streams for cached torrents that play natively.
 
-1. Sign up at [real-debrid.com](https://real-debrid.com) (~£3/mo).
-2. Get your API token at **[real-debrid.com/apitoken](https://real-debrid.com/apitoken)**.
-3. Add to Vercel env (**server-only secret** — never exposed to the browser):
+**There is no shared server key.** A single Real-Debrid key shared across all visitors
+violates RD's ToS and gets the account banned once the app is public. Instead, **each
+signed-in user supplies their own key**:
 
-| Key | Where |
-| --- | --- |
-| `REALDEBRID_API_KEY` | real-debrid.com/apitoken |
+1. The user signs up at [real-debrid.com](https://real-debrid.com) (~£3/mo).
+2. They get their API token at **[real-debrid.com/apitoken](https://real-debrid.com/apitoken)**.
+3. They paste it once on their **Profile** page. It's stored per-user in Supabase
+   (`public.user_settings`, service-role only) and **never returned to the browser** —
+   the settings API reports only whether a key is set, plus a masked hint.
 
-Redeploy. The watch page now resolves cached torrents to HTTPS via Real-Debrid; the
-player streams them directly with no WebTorrent. The app server-side-resolves the final
-RD link and redirects the browser to it, so the key never leaves the server.
+Nothing to configure in Vercel env for Real-Debrid. The watch page resolves each user's
+own key server-side, asks Torrentio for their cached torrents, and resolves the final RD
+link — the key never leaves the server. Users without a key see a prompt to add one
+(or fall back to WebTorrent, which rarely works for public torrents).
+
+> Requires Supabase + Clerk configured (so users can sign in and we can store the key).
 
 > Sources marked ⚡ are RD-cached (instant). Uncached torrents may need RD to download
 > first. The source picker prefers cached + highest quality.
@@ -162,8 +167,9 @@ Redeploy. The watch page now resolves a single `English Dub · HD` or `English S
 source per episode from HiAnime, with proper English subtitles attached. HLS routes
 through `/api/hls` (Referer injection + CORS) and subtitles through `/api/sub`.
 
-> **Keep `REALDEBRID_API_KEY` set even with this enabled.** It's the fallback that keeps
-> the site usable when HiAnime breaks or is rate-limiting your deployment.
+> When HiAnime breaks or is rate-limiting your deployment, Tsumi falls back to each
+> user's own Real-Debrid key (section 4b). With no provider and no user key, that user
+> sees a prompt to add their Real-Debrid token.
 
 ## 5. (Optional) Pre-roll ads & source endpoints
 
@@ -217,8 +223,7 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PRO_PRICE_ID=
 
-# Real-Debrid (required for playback)
-REALDEBRID_API_KEY=
+# Real-Debrid — BYO-key (no shared server key; users add their own on Profile)
 
 # Optional
 NEXT_PUBLIC_IMA_AD_TAG=

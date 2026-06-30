@@ -29,3 +29,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# electron desktop app
+/dist-app
+/electron/bin

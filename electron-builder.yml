@@ -1,0 +1,40 @@
+appId: com.tsumi.desktop
+productName: Tsumi
+copyright: Tsumi
+
+directories:
+  output: dist-app
+  buildResources: electron/resources
+
+# The desktop app loads the live website, so we don't bundle the Next build —
+# only the Electron shell sources. The shell uses zero npm runtime deps (just
+# Node built-ins + Electron), so we exclude node_modules to keep the installer
+# small.
+files:
+  - electron/**/*
+  - package.json
+  - '!node_modules/**'
+
+# Ship mpv alongside the app. Drop the platform mpv binary into electron/bin/
+# before building; it ends up at <resources>/mpv/ where mpv.js looks for it.
+extraResources:
+  - from: electron/bin
+    to: mpv
+    filter:
+      - '**/*'
+
+win:
+  target: nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target: dmg
+  category: public.app-category.entertainment
+
+linux:
+  target: AppImage
+  category: AudioVideo
