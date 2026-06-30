@@ -9,22 +9,32 @@ protocols:
     schemes:
       - tsumi
 
-# The shell uses no native npm modules, so don't rebuild the project's deps
-# against Electron headers (avoids slow/failing node-gyp builds in CI).
+# Two-package structure: the desktop shell has its OWN package.json
+# (electron/package.json) declaring only its runtime dep — webtorrent. Pointing
+# electron-builder at it (directories.app) means it bundles ONLY webtorrent's
+# dependency tree, not the whole Next.js app, keeping the installer lean while
+# still shipping the built-in torrent client. The root package.json stays the
+# dev/build metadata (electron + electron-builder live there).
+#
+# webtorrent's native modules are all N-API (ABI-stable across Node/Electron),
+# so their prebuilt .node binaries load in Electron as-is — no rebuild needed.
 npmRebuild: false
 
 directories:
   output: dist-app
   buildResources: electron/resources
+  # App sources + the shell's package.json/node_modules live here.
+  app: electron
 
-# The desktop app loads the live website, so we don't bundle the Next build —
-# only the Electron shell sources. The shell uses zero npm runtime deps (just
-# Node built-ins + Electron), so we exclude node_modules to keep the installer
-# small.
+# Paths below are relative to the app dir (electron/). node_modules production
+# deps (webtorrent + tree) are collected automatically; native .node modules are
+# auto-unpacked from the asar by electron-builder.
 files:
-  - electron/**/*
-  - package.json
-  - '!node_modules/**'
+  - '**/*'
+  # mpv.exe ships via extraResources (below), so keep it out of the asar.
+  - '!bin/**'
+  - '!README.md'
+  - '!package-lock.json'
 
 # Ship mpv alongside the app. Drop the platform mpv binary into electron/bin/
 # before building; it ends up at <resources>/mpv/ where mpv.js looks for it.

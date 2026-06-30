@@ -15,8 +15,9 @@ import {
   defaultLayoutIcons,
   DefaultVideoLayout,
 } from '@vidstack/react/player/layouts/default';
-import { Loader2, AlertCircle, Wifi } from 'lucide-react';
+import { AlertCircle, Wifi } from 'lucide-react';
 import type { StreamSource } from '@/lib/stream/sources';
+import { StreamLoading } from './stream-loading';
 import { saveProgress } from '@/lib/progress';
 import {
   loadSourcePref,
@@ -512,38 +513,38 @@ export function VidstackPlayer({
         </MediaPlayer>
       )}
 
-      {/* Connecting / error overlay */}
-      {status !== 'ready' && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-base/90 text-center">
-          {status === 'error' ? (
-            <>
-              <AlertCircle className="h-10 w-10 text-action" />
-              <p className="max-w-sm px-4 text-sm text-zinc-300">
-                {errorMsg || 'No stream sources found for this episode.'}
-              </p>
-              {sources.length > 1 && (
-                <button
-                  onClick={() => setSourceIdx((i) => (i + 1) % sources.length)}
-                  className="btn-ghost mt-2 text-sm"
-                >
-                  Try another source
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-zinc-300">
-                {retryNote
-                  ? retryNote
-                  : isDirect
-                    ? 'Loading stream…'
-                    : `Connecting to peers… ${downloadPct > 0 ? `${downloadPct}% buffered` : ''}`}
-              </p>
-              <p className="katakana text-[10px]">ストリーミング準備中</p>
-            </>
+      {/* Error overlay */}
+      {status === 'error' && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-base/90 text-center">
+          <AlertCircle className="h-10 w-10 text-action" />
+          <p className="max-w-sm px-4 text-sm text-zinc-300">
+            {errorMsg || 'No stream sources found for this episode.'}
+          </p>
+          {sources.length > 1 && (
+            <button
+              onClick={() => setSourceIdx((i) => (i + 1) % sources.length)}
+              className="btn-ghost mt-2 text-sm"
+            >
+              Try another source
+            </button>
           )}
         </div>
+      )}
+
+      {/* Loading hero — anime title brightens as the stream loads */}
+      {status !== 'ready' && status !== 'error' && (
+        <StreamLoading
+          title={title}
+          coverImage={coverImage}
+          progress={isDirect ? undefined : downloadPct > 0 ? downloadPct : undefined}
+          label={
+            retryNote
+              ? retryNote
+              : isDirect
+                ? 'Loading stream…'
+                : 'Connecting to peers…'
+          }
+        />
       )}
 
       {/* Status + source selector (top overlay) */}

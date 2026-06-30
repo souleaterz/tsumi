@@ -2,16 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  AlertCircle,
-  Check,
-  Loader2,
-  MonitorPlay,
-  Play,
-  SkipForward,
-  Zap,
-} from 'lucide-react';
+import { AlertCircle, Check, Loader2, MonitorPlay, Play, Zap } from 'lucide-react';
 import type { StreamSource } from '@/lib/stream/sources';
+import { StreamLoading } from './stream-loading';
 import { desktop } from '@/lib/desktop';
 import { saveProgress } from '@/lib/progress';
 
@@ -93,7 +86,6 @@ export function DesktopWatch({
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null);
   const [error, setError] = useState('');
-  const [position, setPosition] = useState(0);
   const [skip, setSkip] = useState<SkipTimes>({});
   // null = AniSkip not fetched yet; we wait for it before the first play so the
   // markers are present from the start.
@@ -145,7 +137,6 @@ export function DesktopWatch({
         return;
       }
       if (p.duration > 0) durationRef.current = p.duration;
-      setPosition(p.position);
       const dur = durationRef.current;
       if (p.position > 0 && dur > 0) {
         saveProgress(
@@ -198,12 +189,26 @@ export function DesktopWatch({
       setLoadingIdx(idx);
       setError('');
       try {
-        const res = await fetch(
-          `/api/direct-url/${anilistId}/${episode}?t=${encodeURIComponent(source.title)}`,
-        );
-        const data = await res.json();
-        if (!res.ok || !data.url) {
-          throw new Error(data.error || 'Could not get a direct link for this source.');
+        // Two playback paths:
+        //  • Real-Debrid source (has a keyless /api/direct-url) → fast HTTPS.
+        //  • Magnet/infoHash source (no RD key) → torrent it via the embedded
+        //    WebTorrent client and play the local stream (the Stremio model).
+        let mediaUrl: string;
+        if (source.magnet || source.infoHash) {
+          const t = await bridge.streamTorrent(source.magnet ?? source.infoHash!);
+          if (!t.ok || !t.url) {
+            throw new Error(t.error || 'Could not start the torrent for this source.');
+          }
+          mediaUrl = t.url;
+        } else {
+          const res = await fetch(
+            `/api/direct-url/${anilistId}/${episode}?t=${encodeURIComponent(source.title)}`,
+          );
+          const data = await res.json();
+          if (!res.ok || !data.url) {
+            throw new Error(data.error || 'Could not get a direct link for this source.');
+          }
+          mediaUrl = data.url;
         }
 
         // mpv is a separate process — subtitle URLs must be absolute.
@@ -214,11 +219,13 @@ export function DesktopWatch({
 
         const el = stageRef.current;
         const r = el?.getBoundingClientRect();
-        const result = await bridge.playInMpv(data.url, {
+        const result = await bridge.playInMpv(mediaUrl, {
           title: `${title} — Episode ${episode}`,
           startAt,
           subtitles: subUrls,
           chapters: buildChapters(skip, durationSec),
+          skip,
+          hasNext,
           bounds: r
             ? { x: r.left, y: r.top, width: r.width, height: r.height }
             : undefined,
@@ -242,7 +249,7 @@ export function DesktopWatch({
         setLoadingIdx((cur) => (cur === idx ? null : cur));
       }
     },
-    [anilistId, episode, sources, title, startAt, skip, durationSec],
+    [anilistId, episode, sources, title, startAt, skip, durationSec, hasNext],
   );
 
   // Reset per-episode state when the source list changes (next episode).
@@ -253,7 +260,6 @@ export function DesktopWatch({
     setActiveIdx(null);
     setLoadingIdx(null);
     setError('');
-    setPosition(0);
   }, [sources]);
 
   // Auto-play the best-ranked source once AniSkip has settled (so markers show
@@ -277,17 +283,12 @@ export function DesktopWatch({
     if (hasNext) router.push(`/watch/${anilistId}/${episode + 1}`);
   }, [hasNext, router, anilistId, episode]);
 
-  const skipIntro = useCallback(() => {
-    if (skip.op) desktop()?.mpvSeek(skip.op.end);
-  }, [skip.op]);
-
-  // Contextual button visibility, driven by mpv's reported position.
-  const inIntro =
-    !!skip.op && position >= skip.op.start && position < skip.op.end - 0.5;
-  const nearEnd =
-    hasNext &&
-    ((!!skip.ed && position >= skip.ed.start) ||
-      (!!durationSec && durationSec > 0 && position >= durationSec - 90));
+  // The on-video "Next Episode" button (drawn by mpv) navigates here.
+  useEffect(() => {
+    const bridge = desktop();
+    if (!bridge) return;
+    return bridge.onNextEpisode(() => goNext());
+  }, [goNext]);
 
   const active = activeIdx !== null ? sources[activeIdx] : null;
   const isResolving = loadingIdx !== null;
@@ -310,12 +311,7 @@ export function DesktopWatch({
             />
           )}
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-t from-base via-base/70 to-base/40 text-center">
-            {isResolving ? (
-              <>
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm text-zinc-300">Opening source in the player…</p>
-              </>
-            ) : active ? (
+            {isResolving ? null : active ? (
               <>
                 <MonitorPlay className="h-10 w-10 text-accent" />
                 <p className="text-sm font-semibold text-white">
@@ -343,34 +339,17 @@ export function DesktopWatch({
             )}
             <span className="katakana text-[10px]">アプリで再生</span>
           </div>
+
+          {/* Loading hero — anime title brightens as the source opens */}
+          {isResolving && (
+            <StreamLoading
+              title={title}
+              coverImage={coverImage}
+              label="Opening source in the player…"
+            />
+          )}
         </div>
-
-        {/* Contextual actions — rendered just under the player (the embedded
-            video covers the stage, so these sit beneath it). */}
-        {active && (inIntro || nearEnd) && (
-          <div className="pointer-events-none absolute inset-x-0 -bottom-3 flex translate-y-full justify-end gap-2 pt-3">
-            {inIntro && (
-              <button
-                onClick={skipIntro}
-                className="pointer-events-auto inline-flex items-center gap-2 rounded-md border border-white/15 bg-base/90 px-4 py-2 text-sm font-semibold text-white shadow-glow backdrop-blur transition hover:bg-surface"
-              >
-                <SkipForward className="h-4 w-4 text-accent" /> Skip Intro
-              </button>
-            )}
-            {nearEnd && (
-              <button
-                onClick={goNext}
-                className="pointer-events-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-[#0A0A0F] shadow-glow transition hover:bg-accent/80"
-              >
-                Next Episode <SkipForward className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
       </div>
-
-      {/* Spacer so the absolutely-positioned action row doesn't overlap the list. */}
-      {active && (inIntro || nearEnd) && <div className="h-12" />}
 
       {/* Source picker (Stremio-style list) */}
       {sources.length > 0 && (

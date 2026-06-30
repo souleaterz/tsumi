@@ -5,7 +5,6 @@ import type { StreamSource } from '@/lib/stream/sources';
 import { VidstackPlayer } from './vidstack-player';
 import { DesktopWatch } from './desktop-watch';
 import { AppPromoBar } from './app-promo-bar';
-import { PreRollAd } from './preroll-ad';
 import { getEpisodeProgress } from '@/lib/progress';
 import { useUserId } from '@/lib/auth/use-user-id';
 import { isDesktop } from '@/lib/desktop';
@@ -17,7 +16,6 @@ interface Props {
   coverImage?: string;
   totalEpisodes?: number;
   sources: StreamSource[];
-  isPro?: boolean;
   preferDub?: boolean;
   /** MyAnimeList id — used to fetch AniSkip intro/outro times (desktop). */
   idMal?: number | null;
@@ -29,20 +27,18 @@ interface Props {
  * Orchestrates the watch flow and splits the two products:
  *
  *  • Desktop app → native Stremio-style source picker that plays in mpv
- *    (smooth, no transcode). No pre-roll gate; playback is native.
- *  • Website → pre-roll ad gate (free tier) then the in-browser player, with a
- *    banner nudging viewers to the smoother desktop app.
+ *    (smooth, no transcode).
+ *  • Website → the in-browser player, with a banner nudging viewers to the
+ *    smoother desktop app.
  *
  * Either way we look up any saved position so playback resumes where the
  * viewer left off.
  */
 export function WatchExperience({
-  isPro = false,
   idMal,
   durationSec,
   ...playerProps
 }: Props) {
-  const [adDone, setAdDone] = useState(isPro);
   const [startAt, setStartAt] = useState(0);
   const { userId, isLoaded } = useUserId();
   // null until mounted — avoids SSR/first-paint mismatch and a flash of the
@@ -74,10 +70,6 @@ export function WatchExperience({
         startAt={startAt}
       />
     );
-  }
-
-  if (!adDone) {
-    return <PreRollAd onComplete={() => setAdDone(true)} />;
   }
 
   return (

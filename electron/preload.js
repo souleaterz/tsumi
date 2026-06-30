@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld('tsumiDesktop', {
   // Stop the running mpv instance.
   stopMpv: () => ipcRenderer.invoke('mpv:stop'),
 
+  // No-key streaming: torrent a magnet/infoHash via the embedded WebTorrent
+  // client and get back a local HTTP URL to play in mpv. Returns { ok, url, error? }.
+  streamTorrent: (magnet) => ipcRenderer.invoke('torrent:stream', { magnet }),
+
   // Re-place the embedded video surface over the stage (CSS-pixel rect relative
   // to the window content). Called on scroll / resize.
   setVideoBounds: (rect) => ipcRenderer.send('video:bounds', rect),
@@ -23,6 +27,13 @@ contextBridge.exposeInMainWorld('tsumiDesktop', {
 
   // Seek the running mpv instance to an absolute position in seconds.
   mpvSeek: (seconds) => ipcRenderer.send('mpv:seek', seconds),
+
+  // The on-video "Next Episode" button was clicked. Returns unsubscribe.
+  onNextEpisode: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('mpv:next-episode', handler);
+    return () => ipcRenderer.removeListener('mpv:next-episode', handler);
+  },
 
   // Subscribe to playback progress events from the running mpv instance.
   // Returns an unsubscribe function.

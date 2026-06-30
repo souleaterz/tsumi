@@ -14,7 +14,26 @@
 
 const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
-const { playMpv, stopMpv, seekMpv, onMpvProgress } = require('./mpv');
+const {
+  playMpv,
+  stopMpv,
+  seekMpv,
+  onMpvProgress,
+  onMpvMessage,
+} = require('./mpv');
+const { streamTorrent, stopTorrents } = require('./torrent');
+
+// ── Make the embedded mpv video actually visible ──────────────────────────
+// mpv renders into a child window via --wid. With Chromium's GPU compositing
+// (DirectComposition) on Windows, Electron paints its own surface OVER that
+// child window, so you get mpv's audio but a black picture. Disabling hardware
+// compositing makes Electron paint into the window DC instead, letting mpv's
+// child window show on top. Playback is mpv-native, so the UI losing GPU accel
+// has no effect on video smoothness.
+app.disableHardwareAcceleration();
+// Stop Electron from treating the borderless video host as "occluded" and
+// skipping paints, which can also blank the embedded surface.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 // The site the shell wraps.
 //  • Packaged app  → your hosted Vercel deployment (PROD_URL below).
@@ -229,6 +248,14 @@ if (!gotLock) {
       if (p && p.ended) hideVideoWindow();
     });
 
+    // The on-video "Next Episode" button (drawn by mpv's Lua) asks the renderer
+    // to navigate to the next episode.
+    onMpvMessage((m) => {
+      if (m && m.type === 'next-episode' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('mpv:next-episode');
+      }
+    });
+
     mainWindow.on('closed', () => {
       if (videoWin && !videoWin.isDestroyed()) videoWin.destroy();
       videoWin = null;
@@ -249,21 +276,18 @@ if (!gotLock) {
   ipcMain.on('video:bounds', (_evt, rect) => placeVideoWindow(rect));
   ipcMain.on('video:hide', () => hideVideoWindow());
 
-  // Renderer asks us to play a direct media URL in the embedded mpv surface.
+  // Renderer asks us to play a direct media URL in mpv.
+  //
+  // We deliberately DON'T embed mpv via --wid: the borderless child window never
+  // received mouse input or showed mpv's on-screen controller, so there was no
+  // seek / pause / fullscreen. Launching mpv in its OWN window (no wid → mpv.js
+  // adds --fullscreen) gives the full native OSC and "just works".
   ipcMain.handle('mpv:play', async (_evt, { url, opts }) => {
     try {
       const o = opts || {};
-      // Spin up / position the embedded video host before mpv launches.
-      ensureVideoWindow();
-      if (o.bounds) placeVideoWindow(o.bounds);
-      if (videoWin && !videoWin.isDestroyed()) videoWin.showInactive();
-      const wid = widForVideoWindow();
-      await playMpv(url, { ...o, wid });
-      // Re-assert position once mpv has taken over the surface.
-      placeVideoWindow();
+      await playMpv(url, { ...o, wid: undefined });
       return { ok: true };
     } catch (err) {
-      hideVideoWindow();
       return { ok: false, error: err && err.message ? err.message : String(err) };
     }
   });
@@ -271,10 +295,24 @@ if (!gotLock) {
   // Seek the running mpv instance (Skip Intro button).
   ipcMain.on('mpv:seek', (_evt, seconds) => seekMpv(seconds));
 
-  // Renderer asks us to stop mpv (leaving the page, switching away).
+  // No-key streaming: torrent a magnet via the embedded WebTorrent client and
+  // return a local HTTP URL the renderer hands straight to mpv (the Stremio
+  // model — works without a Real-Debrid key).
+  ipcMain.handle('torrent:stream', async (_evt, { magnet }) => {
+    try {
+      const { url } = await streamTorrent(magnet);
+      return { ok: true, url };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : String(err) };
+    }
+  });
+
+  // Renderer asks us to stop mpv (leaving the page, switching away). Also stop
+  // any torrent we were seeding/downloading so it doesn't run in the background.
   ipcMain.handle('mpv:stop', () => {
     stopMpv();
     hideVideoWindow();
+    void stopTorrents();
     return { ok: true };
   });
 
@@ -282,6 +320,11 @@ if (!gotLock) {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+
+  // Tear down the torrent client on exit so nothing keeps downloading/seeding.
+  app.on('before-quit', () => {
+    void stopTorrents();
   });
 
   app.on('window-all-closed', () => {

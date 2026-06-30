@@ -13,11 +13,14 @@ const net = require('net');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const TSUMI_LUA = require('./tsumi-lua');
 
 let child = null; // current mpv process
 let ipc = null; // current IPC socket
 let chaptersFile = null; // temp ffmetadata file for the current playback
+let luaScriptPath = null; // temp path of our on-video buttons script
 const progressCbs = [];
+const messageCbs = []; // client-message events from our Lua (e.g. tsumi-next)
 
 // Windows named pipe mpv listens on. (mpv accepts a plain name; Node needs the
 // full \\.\pipe\ prefix to connect.)
@@ -28,6 +31,45 @@ const PIPE_PATH =
 /** Subscribe to { position, duration, ended } updates. */
 function onMpvProgress(cb) {
   progressCbs.push(cb);
+}
+
+/** Subscribe to in-player messages (e.g. { type: 'next-episode' }). */
+function onMpvMessage(cb) {
+  messageCbs.push(cb);
+}
+function emitMessage(m) {
+  for (const cb of messageCbs) {
+    try {
+      cb(m);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Write the on-video buttons Lua to a temp file (once) and return its path. */
+function ensureLuaScript() {
+  if (luaScriptPath && fs.existsSync(luaScriptPath)) return luaScriptPath;
+  try {
+    const file = path.join(os.tmpdir(), 'tsumi-mpv-buttons.lua');
+    fs.writeFileSync(file, TSUMI_LUA, 'utf8');
+    luaScriptPath = file;
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/** Build mpv --script-opts for the Lua from AniSkip times + next-episode flag. */
+function buildScriptOpts(opts) {
+  const s = opts.skip || {};
+  const parts = [
+    `tsumi-op_start=${s.op ? s.op.start : -1}`,
+    `tsumi-op_end=${s.op ? s.op.end : -1}`,
+    `tsumi-ed_start=${s.ed ? s.ed.start : -1}`,
+    `tsumi-has_next=${opts.hasNext ? 'yes' : 'no'}`,
+  ];
+  return parts.join(',');
 }
 
 /**
@@ -164,6 +206,10 @@ function connectIpc(attempt = 0) {
         } else if (msg.name === 'time-pos' && typeof msg.data === 'number') {
           emit({ position: msg.data, duration, ended: false });
         }
+      } else if (msg.event === 'client-message') {
+        // Our Lua buttons broadcast `script-message tsumi-next`.
+        const args = Array.isArray(msg.args) ? msg.args : [];
+        if (args[0] === 'tsumi-next') emitMessage({ type: 'next-episode' });
       }
     }
   });
@@ -230,6 +276,12 @@ function playMpv(url, opts = {}) {
     cleanupChaptersFile();
     chaptersFile = writeChaptersFile(opts.chapters);
     if (chaptersFile) args.push(`--chapters-file=${chaptersFile}`);
+
+    // On-video Skip Intro / Next Episode buttons (drawn by mpv itself).
+    const lua = ensureLuaScript();
+    if (lua) {
+      args.push(`--script=${lua}`, `--script-opts=${buildScriptOpts(opts)}`);
+    }
 
     if (opts.title) args.push(`--title=${opts.title}`, `--force-media-title=${opts.title}`);
     if (opts.startAt && opts.startAt > 0) args.push(`--start=+${Math.floor(opts.startAt)}`);
@@ -300,4 +352,4 @@ function stopMpv() {
   cleanupChaptersFile();
 }
 
-module.exports = { playMpv, stopMpv, seekMpv, onMpvProgress };
+module.exports = { playMpv, stopMpv, seekMpv, onMpvProgress, onMpvMessage };

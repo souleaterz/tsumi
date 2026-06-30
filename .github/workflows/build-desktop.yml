@@ -25,6 +25,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The desktop shell has its own package.json (two-package structure) with
+      # webtorrent for the built-in torrent client. Install its tree so
+      # electron-builder can bundle it (native modules are N-API prebuilds).
+      - name: Install desktop shell dependencies
+        run: npm ci
+        working-directory: electron
+
       # mpv is the native player the app launches for smooth playback. We bundle
       # the x86_64 (Intel/AMD) Windows build into the installer.
       - name: Download mpv (x86_64)

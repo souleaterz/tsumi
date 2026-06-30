@@ -6,10 +6,11 @@ import { getAnimeDetail } from '@/lib/anilist/client';
 import { resolveStreams, getEpisodeMeta } from '@/lib/stream/sources';
 import { isProviderEnabled } from '@/lib/stream/provider';
 import { bestTitle } from '@/lib/utils';
-import { getProStatus, currentUserId } from '@/lib/subscription';
+import { currentUserId } from '@/lib/subscription';
 import { getUserRdKey } from '@/lib/settings';
 import { getEpisodeSubs } from '@/lib/subs';
 import { WatchExperience } from '@/components/watch/watch-experience';
+import { NeedsKeyBanner } from '@/components/watch/needs-key-banner';
 import { EpisodeNav } from '@/components/watch/episode-nav';
 import { AdSlot } from '@/components/ui/ad-slot';
 
@@ -35,10 +36,9 @@ export default async function WatchPage({ params, searchParams }: Props) {
   const wantDub = searchParams.audio !== 'sub';
 
   const userId = await currentUserId();
-  const [media, epMeta, isPro, rdKey] = await Promise.all([
+  const [media, epMeta, rdKey] = await Promise.all([
     getAnimeDetail(id),
     getEpisodeMeta(id),
-    getProStatus(userId),
     getUserRdKey(userId),
   ]);
   if (!media) notFound();
@@ -112,22 +112,9 @@ export default async function WatchPage({ params, searchParams }: Props) {
         <ChevronLeft className="h-4 w-4" /> Back to {title}
       </Link>
 
-      {/* BYO-key prompt — streaming needs the user's own Real-Debrid key. */}
-      {needsKey && (
-        <div className="mb-4 rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm text-zinc-200">
-          <p className="font-semibold text-white">Add your Real-Debrid key to stream</p>
-          <p className="mt-1 text-zinc-300">
-            Tsumi streams through your own Real-Debrid account. Paste your API key
-            on your profile once and every episode plays over fast HTTPS.
-          </p>
-          <Link
-            href="/profile"
-            className="mt-3 inline-block rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-primary/80"
-          >
-            Add Real-Debrid key →
-          </Link>
-        </div>
-      )}
+      {/* BYO-key prompt — only on the website (the desktop app streams without
+          a key via the embedded torrent client, so the banner hides itself there). */}
+      {needsKey && <NeedsKeyBanner />}
 
       {/* Player */}
       <WatchExperience
@@ -137,7 +124,6 @@ export default async function WatchPage({ params, searchParams }: Props) {
         coverImage={cover}
         totalEpisodes={totalEpisodes}
         sources={availableSources}
-        isPro={isPro}
         preferDub={audioPref === 'dub'}
         idMal={media.idMal ?? undefined}
         durationSec={media.duration ? media.duration * 60 : undefined}

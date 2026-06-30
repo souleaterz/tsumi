@@ -33,3 +33,5 @@ yarn-error.log*
 # electron desktop app
 /dist-app
 /electron/bin
+# Shell's own deps (two-package structure) — installed via electron/package-lock.json.
+/electron/node_modules

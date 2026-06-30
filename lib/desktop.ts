@@ -30,6 +30,10 @@ export interface MpvPlayOptions {
   bounds?: VideoRect;
   /** Chapters for the seek bar (AniSkip intro/outro markers). */
   chapters?: { start: number; end: number; title: string }[];
+  /** AniSkip op/ed times — drive the on-video Skip Intro / Next Episode buttons. */
+  skip?: { op?: { start: number; end: number }; ed?: { start: number; end: number } };
+  /** Whether a next episode exists (enables the on-video Next Episode button). */
+  hasNext?: boolean;
 }
 
 export interface MpvProgress {
@@ -47,6 +51,12 @@ interface TsumiDesktopBridge {
   playInMpv(url: string, opts?: MpvPlayOptions): Promise<{ ok: boolean; error?: string }>;
   /** Stop the running mpv instance (e.g. to watch in-window instead). */
   stopMpv(): Promise<{ ok: boolean }>;
+  /**
+   * No-key streaming: torrent a magnet/infoHash through the embedded WebTorrent
+   * client and get back a local HTTP URL to feed `playInMpv` — the Stremio model
+   * that works with no Real-Debrid key. Returns the local URL or an error.
+   */
+  streamTorrent(magnet: string): Promise<{ ok: boolean; url?: string; error?: string }>;
   /** Subscribe to playback progress from the running mpv instance. */
   onProgress(cb: (p: MpvProgress) => void): () => void;
 
@@ -57,6 +67,8 @@ interface TsumiDesktopBridge {
   hideVideo(): void;
   /** Seek the running mpv instance to an absolute position (seconds). */
   mpvSeek(seconds: number): void;
+  /** Fires when the on-video "Next Episode" button is clicked. Returns unsubscribe. */
+  onNextEpisode(cb: () => void): () => void;
 
   // ── Frameless window controls ──
   /** Minimise the app window. */
