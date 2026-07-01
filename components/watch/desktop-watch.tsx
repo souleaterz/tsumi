@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Check, Loader2, MonitorPlay, Play, Zap } from 'lucide-react';
 import type { StreamSource } from '@/lib/stream/sources';
@@ -19,6 +19,8 @@ interface Props {
   userId?: string | null;
   idMal?: number | null;
   durationSec?: number;
+  /** Title / episode nav / advert — rendered above the source picker. */
+  belowPlayer?: ReactNode;
 }
 
 interface Segment {
@@ -79,6 +81,7 @@ export function DesktopWatch({
   userId = null,
   idMal,
   durationSec,
+  belowPlayer,
 }: Props) {
   const router = useRouter();
   const stageRef = useRef<HTMLDivElement>(null);
@@ -350,6 +353,10 @@ export function DesktopWatch({
           )}
         </div>
       </div>
+
+      {/* Title / episode nav / advert — kept above the source list so the Next
+          Episode button is reachable without scrolling past every source. */}
+      {belowPlayer}
 
       {/* Source picker (Stremio-style list) */}
       {sources.length > 0 && (

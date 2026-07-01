@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { StreamSource } from '@/lib/stream/sources';
 import { VidstackPlayer } from './vidstack-player';
 import { DesktopWatch } from './desktop-watch';
@@ -21,6 +21,12 @@ interface Props {
   idMal?: number | null;
   /** Episode runtime in seconds — improves AniSkip matching + end detection. */
   durationSec?: number;
+  /**
+   * Episode title / prev-next nav / advert block. Rendered right after the
+   * player on the website, and ABOVE the source picker in the desktop app so
+   * the Next Episode button isn't buried under the source list.
+   */
+  belowPlayer?: ReactNode;
 }
 
 /**
@@ -37,6 +43,7 @@ interface Props {
 export function WatchExperience({
   idMal,
   durationSec,
+  belowPlayer,
   ...playerProps
 }: Props) {
   const [startAt, setStartAt] = useState(0);
@@ -68,6 +75,7 @@ export function WatchExperience({
         durationSec={durationSec}
         userId={userId}
         startAt={startAt}
+        belowPlayer={belowPlayer}
       />
     );
   }
@@ -76,6 +84,7 @@ export function WatchExperience({
     <>
       <AppPromoBar anilistId={playerProps.anilistId} episode={playerProps.episode} />
       <VidstackPlayer {...playerProps} userId={userId} startAt={startAt} />
+      {belowPlayer}
     </>
   );
 }

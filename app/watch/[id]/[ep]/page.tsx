@@ -116,6 +116,47 @@ export default async function WatchPage({ params, searchParams }: Props) {
       ? sources.filter((s) => s.dub)
       : sources;
 
+  // Episode title + nav + advert. Threaded into WatchExperience so it renders
+  // ABOVE the desktop source picker — viewers shouldn't have to scroll past a
+  // long source list to reach the Next Episode button.
+  const belowPlayer = (
+    <div className="mt-5 flex flex-col gap-4">
+      <div>
+        <span className="katakana text-[10px]">エピソード {ep}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="text-3xl text-white sm:text-4xl">
+            {title}
+            <span className="ml-3 text-accent">EP {ep}</span>
+          </h1>
+        </div>
+        {epInfo?.title && (
+          <p className="mt-1 text-zinc-400">{epInfo.title}</p>
+        )}
+      </div>
+
+      <EpisodeNav anilistId={id} episode={ep} totalEpisodes={totalEpisodes} />
+
+      {epInfo?.overview && (
+        <p className="max-w-3xl text-sm leading-relaxed text-zinc-400">
+          {epInfo.overview}
+        </p>
+      )}
+
+      {availableSources.length > 0 && (
+        <p className="text-xs text-zinc-600">
+          {availableSources.length} stream source
+          {availableSources.length > 1 ? 's' : ''} available · resolved via Torrentio
+          {sourceMode === 'rd'
+            ? ', streamed over HTTPS via Real-Debrid.'
+            : ', streamed peer-to-peer via WebTorrent (desktop app).'}
+        </p>
+      )}
+
+      {/* Ad slot — below the player + episode metadata. */}
+      <AdSlot slot="watch-banner" />
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       {/* Breadcrumb */}
@@ -138,7 +179,9 @@ export default async function WatchPage({ params, searchParams }: Props) {
         </div>
       )}
 
-      {/* Player */}
+      {/* Player. On desktop the source picker lives inside this component and is
+          rendered BELOW `belowPlayer` (title/nav/ad); on the website belowPlayer
+          simply follows the player. */}
       <WatchExperience
         anilistId={id}
         episode={ep}
@@ -149,44 +192,8 @@ export default async function WatchPage({ params, searchParams }: Props) {
         preferDub={audioPref === 'dub'}
         idMal={media.idMal ?? undefined}
         durationSec={media.duration ? media.duration * 60 : undefined}
+        belowPlayer={belowPlayer}
       />
-
-      {/* Title + nav */}
-      <div className="mt-5 flex flex-col gap-4">
-        <div>
-          <span className="katakana text-[10px]">エピソード {ep}</span>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <h1 className="text-3xl text-white sm:text-4xl">
-              {title}
-              <span className="ml-3 text-accent">EP {ep}</span>
-            </h1>
-          </div>
-          {epInfo?.title && (
-            <p className="mt-1 text-zinc-400">{epInfo.title}</p>
-          )}
-        </div>
-
-        <EpisodeNav anilistId={id} episode={ep} totalEpisodes={totalEpisodes} />
-
-        {epInfo?.overview && (
-          <p className="max-w-3xl text-sm leading-relaxed text-zinc-400">
-            {epInfo.overview}
-          </p>
-        )}
-
-        {availableSources.length > 0 && (
-          <p className="text-xs text-zinc-600">
-            {availableSources.length} stream source
-            {availableSources.length > 1 ? 's' : ''} available · resolved via Torrentio
-            {sourceMode === 'rd'
-              ? ', streamed over HTTPS via Real-Debrid.'
-              : ', streamed peer-to-peer via WebTorrent (desktop app).'}
-          </p>
-        )}
-
-        {/* Ad slot — below the player + episode metadata. */}
-        <AdSlot slot="watch-banner" />
-      </div>
     </div>
   );
 }

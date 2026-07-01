@@ -206,6 +206,36 @@ function rankSources(streams: StreamSource[]): StreamSource[] {
 }
 
 /**
+ * Rank magnet sources for NATIVE (mpv / desktop app) playback.
+ *
+ * Unlike the browser RD path, the desktop app streams the raw file straight to
+ * mpv — no Real-Debrid transcode bottleneck — so higher resolution is genuinely
+ * better. Ordering rules (from the top of the list down):
+ *   1. Real-Debrid cached first (instant start).
+ *   2. HD tier (2160p/1080p/720p) above everything. 480p and anything
+ *      lower/unknown is FORCED to the bottom regardless of seeders.
+ *   3. Within the HD tier, most seeders wins — so a well-seeded 720p can
+ *      outrank a poorly-seeded 1080p.
+ *   4. On a seeder tie, higher resolution wins (1080p before 720p).
+ * 480p and below are sorted among themselves by seeders.
+ */
+function rankTorrentSources(streams: StreamSource[]): StreamSource[] {
+  // HD tier flag — 480p/unknown drop out of contention entirely.
+  const hd = (q?: string) => (q === '2160p' || q === '1080p' || q === '720p' ? 1 : 0);
+  // Tiebreaker nudge so higher resolution wins when seeders are equal.
+  const resBias = (q?: string) =>
+    q === '2160p' ? 3 : q === '1080p' ? 2 : q === '720p' ? 1 : 0;
+  return [...streams].sort((a, b) => {
+    if (a.cached !== b.cached) return a.cached ? -1 : 1;
+    const tier = hd(b.quality) - hd(a.quality);
+    if (tier !== 0) return tier;
+    const seeds = (b.seeders ?? 0) - (a.seeders ?? 0);
+    if (seeds !== 0) return seeds;
+    return resBias(b.quality) - resBias(a.quality);
+  });
+}
+
+/**
  * Fetch Torrentio sources for a Kitsu id + episode.
  *
  * With a Real-Debrid key configured, the config segment `realdebrid=<key>` makes
@@ -414,12 +444,16 @@ export async function resolveStreams(
     // English track the player selects (see preferDub / selectPreferredAudio).
     // Without the user's RD key, Torrentio returns magnets (WebTorrent only).
     const torrentio = await resolveTorrentio(anilistId, episode, rdKey);
-    if (torrentio.length > 0) return rankSources(torrentio);
+    // RD (browser) path ranks for smooth transcoding; the keyless magnet path
+    // feeds the desktop app's native mpv player, where higher resolution wins.
+    if (torrentio.length > 0) {
+      return rdKey ? rankSources(torrentio) : rankTorrentSources(torrentio);
+    }
 
     // Nyaa magnets aren't RD-resolvable, so only worth it without a key.
     if (title && !rdKey) {
       const nyaa = await resolveNyaa(title, episode);
-      if (nyaa.length > 0) return rankSources(nyaa);
+      if (nyaa.length > 0) return rankTorrentSources(nyaa);
     }
     return [];
   } catch {
