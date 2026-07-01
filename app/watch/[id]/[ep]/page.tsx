@@ -13,7 +13,6 @@ import { WatchExperience } from '@/components/watch/watch-experience';
 import { NeedsKeyBanner } from '@/components/watch/needs-key-banner';
 import { SourceModeToggle } from '@/components/watch/source-mode-toggle';
 import { EpisodeNav } from '@/components/watch/episode-nav';
-import { AdSlot } from '@/components/ui/ad-slot';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,9 +150,6 @@ export default async function WatchPage({ params, searchParams }: Props) {
             : ', streamed peer-to-peer via WebTorrent (desktop app).'}
         </p>
       )}
-
-      {/* Ad slot — below the player + episode metadata. */}
-      <AdSlot unit={0} />
     </div>
   );
 

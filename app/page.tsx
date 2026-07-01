@@ -3,7 +3,6 @@ import { getPopular, getSeasonal, getTrending, currentSeason } from '@/lib/anili
 import { Hero } from '@/components/home/hero';
 import { ContinueWatching } from '@/components/home/continue-watching';
 import { Recommended } from '@/components/home/recommended';
-import { AdSlot } from '@/components/ui/ad-slot';
 import { CardRow } from '@/components/ui/card-row';
 import { AnimeCard } from '@/components/ui/anime-card';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -64,11 +63,6 @@ export default async function HomePage() {
         <CardRow items={trending} />
       </section>
 
-      {/* Ad slot — between Trending and Seasonal rows. */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <AdSlot unit={0} />
-      </div>
-
       {/* SEASONAL — diagonal accent band */}
       <section className="relative my-10">
         <div className="clip-diagonal grain relative bg-gradient-to-br from-surface/80 via-base to-base py-14">
@@ -93,12 +87,6 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
-
-      {/* Ad slot — before the all-time popular grid. Dormant until a 2nd
-          Adsterra zone is added (NEXT_PUBLIC_ADSTERRA_UNITS / lib/ads.ts). */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <AdSlot unit={1} />
-      </div>
 
       {/* ALL-TIME POPULAR GRID */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
