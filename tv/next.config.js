@@ -3,6 +3,12 @@ const path = require('path');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // With Root Directory = tv on Vercel, the build otherwise picks up the repo's
+  // root .eslintrc (which extends a config not installed in tv/). We lint
+  // separately; don't fail the production build on it.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // The TV app lives in tv/ but imports shared server code (AniList client,
   // stream types) from the repo's ../lib via the @shared alias. externalDir
   // lets Next compile those TypeScript files from outside this app's root.
