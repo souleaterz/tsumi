@@ -24,7 +24,7 @@ export function Hero({ media }: { media: AnilistMedia }) {
       {banner && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          key={media.id}
+          key={`banner-${media.id}`}
           src={banner}
           alt={title}
           className="tv-fade absolute inset-0 h-full w-full object-cover"
@@ -33,7 +33,7 @@ export function Hero({ media }: { media: AnilistMedia }) {
       <div className="absolute inset-0 bg-gradient-to-r from-base via-base/70 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-base via-base/40 to-transparent" />
 
-      <div key={media.id} className="tv-fade relative z-10 flex h-full max-w-[55%] flex-col justify-end px-[var(--tv-safe)] pb-5">
+      <div key={`meta-${media.id}`} className="tv-fade relative z-10 flex h-full max-w-[55%] flex-col justify-end px-[var(--tv-safe)] pb-5">
         <span className="text-[0.6rem] font-semibold uppercase tracking-[0.28em] text-accent">
           Featured
         </span>

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Native player screen: the VLC video surface, a loading overlay shown until
+     the first frame, and a Stremio-style transport bar (seek + play/pause + skip
+     + subtitle/audio pickers) that shows on any key press and auto-hides. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <org.videolan.libvlc.util.VLCVideoLayout
+        android:id="@+id/videoLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Loading overlay (covers the surface until playback starts). -->
+    <LinearLayout
+        android:id="@+id/loading"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/tsumi_base"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:indeterminate="true" />
+
+        <TextView
+            android:id="@+id/loadingTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Buffering…"
+            android:textColor="#A1A1AA"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Transport bar. Starts hidden; PlayerActivity toggles it. -->
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/controls_scrim"
+        android:orientation="vertical"
+        android:paddingStart="48dp"
+        android:paddingEnd="48dp"
+        android:paddingTop="60dp"
+        android:paddingBottom="36dp"
+        android:visibility="gone">
+
+        <!-- Scrubber row: current time — seek bar — total time. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/currentTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:text="0:00"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/seek"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:progressTint="@color/tsumi_accent"
+                android:thumbTint="@color/tsumi_accent" />
+
+            <TextView
+                android:id="@+id/totalTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:gravity="end"
+                android:text="0:00"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- Control row. -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/rewind"
+                style="@style/PlayerButton"
+                android:text="« 10s" />
+
+            <Button
+                android:id="@+id/playPause"
+                style="@style/PlayerButton"
+                android:text="Pause" />
+
+            <Button
+                android:id="@+id/forward"
+                style="@style/PlayerButton"
+                android:text="10s »" />
+
+            <Button
+                android:id="@+id/subs"
+                style="@style/PlayerButton"
+                android:text="Subtitles" />
+
+            <Button
+                android:id="@+id/audio"
+                style="@style/PlayerButton"
+                android:text="Audio" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

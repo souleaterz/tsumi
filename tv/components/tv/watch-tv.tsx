@@ -162,8 +162,36 @@ export function WatchTV({ anilistId, episode, title, coverImage, totalEpisodes }
     ...(hasRdKey ? [{ key: 'rd' as Mode, label: 'Real-Debrid' }] : []),
   ];
 
+  // The source currently being prepared (torrent buffering / direct-link fetch).
+  // Drives the instant full-screen loading screen, mirroring the web app: the
+  // moment you pick a source you get a loading screen, not a frozen list.
+  const preparing = loadingIdx != null ? (sources ?? [])[loadingIdx] : null;
+
   return (
     <div className="px-[var(--tv-safe)] pb-16 pt-8">
+      {preparing && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-base/95 text-center">
+          {coverImage && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={coverImage} alt="" className="absolute inset-0 h-full w-full object-cover opacity-10" />
+          )}
+          <div className="relative z-10 flex flex-col items-center gap-5">
+            <Loader2 className="h-14 w-14 animate-spin text-primary" />
+            <div>
+              <p className="font-heading text-[1.8rem] tracking-wide text-white">
+                {title} <span className="text-zinc-500">· E{episode}</span>
+              </p>
+              <p className="mt-2 text-[0.9rem] text-zinc-300">Preparing your stream…</p>
+              <p className="mt-1 max-w-md text-[0.75rem] text-zinc-500">
+                {preparing.magnet || preparing.infoHash
+                  ? 'Connecting to peers — this can take a moment on the first play.'
+                  : 'Fetching a direct link…'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stage */}
       <div className="relative mb-5 aspect-[21/9] w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
         {coverImage && (

@@ -17,9 +17,19 @@ export function SpatialInit() {
       // Geometric focus movement (works for our sidebar + rails layout).
       debug: false,
       visualDebug: false,
-      // Let the browser's native focus follow too, so screen readers and the
-      // scrollIntoView we trigger on focus behave predictably.
+      // Measure every candidate's live rect at each keypress instead of trusting
+      // cached layout. Without this, once a scroll container has moved the focused
+      // element gets re-measured fresh while its neighbours stay stale, and the
+      // mismatch makes the D-pad jump two cells over — the "skips every second
+      // poster" bug on the Browse grid.
+      useGetBoundingClientRect: true,
+      // Let the browser's native focus follow too (screen readers, predictable
+      // DOM focus)…
       shouldFocusDOMNode: true,
+      // …but never let that native focus scroll the page. WE own scrolling via
+      // scrollIntoView; the browser's extra focus-scroll is what made the whole
+      // screen lurch on plain left/right moves.
+      domNodeFocusOptions: { preventScroll: true },
       // Don't scroll the whole document — rails/sections manage their own
       // scrollIntoView on focus.
       shouldUseNativeEvents: false,

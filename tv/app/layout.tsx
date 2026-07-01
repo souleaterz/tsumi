@@ -36,7 +36,9 @@ export default function TvRootLayout({
         <SpatialInit />
         <div className="flex h-screen w-screen overflow-hidden bg-base">
           <Sidebar />
-          <main className="relative h-full flex-1 overflow-y-auto overflow-x-hidden">
+          {/* scroll-pt keeps a focused row from tucking under the sticky page
+              header; scroll-pb leaves breathing room at the bottom. */}
+          <main className="relative h-full flex-1 overflow-y-auto overflow-x-hidden scroll-pt-28 scroll-pb-16">
             {children}
           </main>
         </div>

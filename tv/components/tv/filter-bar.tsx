@@ -26,7 +26,10 @@ export function FilterBar() {
       if (v) p.set(k, v);
       else p.delete(k);
     }
-    router.push(`/browse?${p.toString()}`);
+    // Replace, not push: a filter tweak refines the current view — it shouldn't
+    // stack a new history entry (that was a big source of the "back walks
+    // through dozens of pages" problem on the way to exiting).
+    router.replace(`/browse?${p.toString()}`);
   };
 
   return (

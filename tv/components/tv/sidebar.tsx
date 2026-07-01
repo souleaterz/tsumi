@@ -46,7 +46,11 @@ export function Sidebar() {
             <Focusable
               key={href}
               ariaLabel={label}
-              onEnterPress={() => router.push(href)}
+              onEnterPress={() => {
+                // Don't stack a duplicate entry for the section we're already on
+                // — that just adds dead presses on the way back out.
+                if (!active) router.push(href);
+              }}
               className="!rounded-xl"
             >
               {(focused) => (

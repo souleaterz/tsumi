@@ -56,7 +56,7 @@ export function AboutView({ media, trailerId }: { media: AnilistMedia; trailerId
           <FocusSection className="mt-6 flex items-center gap-4">
             <FocusButton label="Play" Icon={Play} variant="primary" autoFocus onEnterPress={() => router.push(`/watch/${media.id}/1`)} />
             <AddToListButton item={listItem} />
-            <FocusButton label="Back" Icon={ArrowLeft} onEnterPress={() => router.push(`/anime/${media.id}`)} />
+            <FocusButton label="Back" Icon={ArrowLeft} onEnterPress={() => router.back()} />
           </FocusSection>
         </div>
       </div>

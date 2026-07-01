@@ -8,6 +8,7 @@ import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
 
@@ -26,6 +27,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var web: WebView
     private lateinit var streamer: TorrentStreamer
+    private var exitDialog: AlertDialog? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,13 +68,34 @@ class MainActivity : AppCompatActivity() {
         web.loadUrl(BuildConfig.APP_URL)
     }
 
-    // Remote BACK: go back in web history, else drop to the launcher.
+    // Remote BACK: walk back through web history; at the home root, confirm exit
+    // instead of silently dropping to the launcher.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && web.canGoBack()) {
-            web.goBack()
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (exitDialog?.isShowing == true) return true // let the dialog handle it
+            if (web.canGoBack()) {
+                web.goBack()
+            } else {
+                confirmExit()
+            }
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    private fun confirmExit() {
+        if (exitDialog?.isShowing == true) return
+        exitDialog = AlertDialog.Builder(this)
+            .setTitle("Exit Tsumi?")
+            .setMessage("Leave the app and return to the Fire TV home screen?")
+            .setPositiveButton("Exit") { _, _ -> finish() }
+            .setNegativeButton("Stay", null)
+            .create()
+            .also { dialog ->
+                dialog.show()
+                // Default focus to "Stay" so an accidental extra BACK/OK doesn't quit.
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.requestFocus()
+            }
     }
 
     private fun goImmersive() {
@@ -85,6 +108,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        exitDialog?.dismiss()
+        exitDialog = null
         PlaybackBus.sink = null
         streamer.stop()
         web.destroy()

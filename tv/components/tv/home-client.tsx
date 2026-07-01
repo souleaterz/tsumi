@@ -39,7 +39,7 @@ export function HomeClient({
       </div>
 
       {/* The only part that scrolls. */}
-      <div className="relative z-20 -mt-6 flex-1 overflow-y-auto pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="relative z-20 -mt-6 flex-1 overflow-y-auto scroll-pt-8 pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {showContinue && <ContinueRail onFocusItem={setActive} />}
         {rails.map((r, ri) => (
           <Rail
