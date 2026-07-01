@@ -9,6 +9,7 @@ import org.json.JSONObject
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 
 /**
@@ -80,7 +81,7 @@ class PlayerActivity : AppCompatActivity() {
             val s = subs.optJSONObject(i) ?: continue
             val u = s.optString("url").ifEmpty { subs.optString(i) }
             if (u.isNotEmpty()) {
-                player.addSlave(Media.Slave.Type.Subtitle, Uri.parse(u), i == 0)
+                player.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(u), i == 0)
             }
         }
     }
