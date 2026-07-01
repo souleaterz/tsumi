@@ -1,3 +1,5 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -6,6 +8,18 @@ const nextConfig = {
   // lets Next compile those TypeScript files from outside this app's root.
   experimental: {
     externalDir: true,
+  },
+  webpack: (config) => {
+    // A shared file in ../lib that imports a bare package (e.g. 'aniwatch')
+    // resolves node_modules relative to ITS location — i.e. the repo root, which
+    // Vercel doesn't install when the Root Directory is tv/. Force resolution to
+    // prefer this app's own node_modules so those deps are found in isolation.
+    config.resolve.modules = [
+      path.join(__dirname, 'node_modules'),
+      'node_modules',
+      ...(config.resolve.modules || []),
+    ];
+    return config;
   },
   images: {
     remotePatterns: [
