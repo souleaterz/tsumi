@@ -11,8 +11,8 @@ android {
         applicationId 'com.tsumi.tv'
         minSdk 22          // Fire OS 5 (older Sticks); newer run API 25/28/30
         targetSdk 34
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 5
+        versionName '0.1.5'
 
         // The hosted TV web app URL, surfaced to Kotlin as BuildConfig.APP_URL.
         buildConfigField 'String', 'APP_URL', "\"${project.findProperty('tsumiTvUrl') ?: 'https://tsumi-tv.vercel.app'}\""
