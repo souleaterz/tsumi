@@ -1,0 +1,51 @@
+name: Build Fire TV APK
+
+# Builds the Android TV (Firestick) shell. Runs on a version tag (v*) or manual
+# dispatch. The debug APK is self-signed and installs straight onto a Firestick
+# via adb — no keystore needed. Mirrors build-desktop.yml for the Electron app.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tsumiTvUrl:
+        description: 'Hosted TV web app URL to bake into the APK'
+        required: false
+        default: 'https://tsumi-tv.vercel.app'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-tv
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Gradle wrapper (jar isn't committed)
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug -PtsumiTvUrl="${{ github.event.inputs.tsumiTvUrl || 'https://tsumi-tv.vercel.app' }}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsumi-tv-debug
+          path: android-tv/app/build/outputs/apk/debug/*.apk
+
+      - name: Attach APK to the release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android-tv/app/build/outputs/apk/debug/*.apk

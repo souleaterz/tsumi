@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TsumiTV" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/tsumi_base</item>
+        <item name="android:statusBarColor">@color/tsumi_base</item>
+        <item name="android:navigationBarColor">@color/tsumi_base</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
+    <!-- Player: solid black behind the video surface. -->
+    <style name="Theme.TsumiTV.Player" parent="Theme.TsumiTV">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

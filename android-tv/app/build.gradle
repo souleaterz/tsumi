@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.tsumi.tv'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.tsumi.tv'
+        minSdk 22          // Fire OS 5 (older Sticks); newer run API 25/28/30
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+
+        // The hosted TV web app URL, surfaced to Kotlin as BuildConfig.APP_URL.
+        buildConfigField 'String', 'APP_URL', "\"${project.findProperty('tsumiTvUrl') ?: 'https://tsumi-tv.vercel.app'}\""
+
+        ndk {
+            // Fire TV is ARM; include x86 for the emulator. Trim to shrink the APK.
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Debug builds are self-signed by the Android SDK and install straight onto
+    // a Firestick via adb. A release build needs a keystore (see README).
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+    // Native BitTorrent streaming (frostwire/jlibtorrent under the hood) — the
+    // Stremio model that plays with no Real-Debrid key.
+    implementation 'com.github.TorrentStream:TorrentStream-Android:2.7.0'
+
+    // libVLC — plays raw mkv (dual audio, external subs) and HLS/RD direct links.
+    implementation 'org.videolan.android:libvlc-all:3.6.0'
+}

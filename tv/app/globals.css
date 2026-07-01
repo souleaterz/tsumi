@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Overscan-safe inset — TVs crop the edges of the frame. Everything lives
+     inside this margin so nothing important is cut off on a real Firestick. */
+  --tv-safe: 3vw;
+}
+
+html {
+  /* 10-foot base: scale type up so it's readable from the sofa. */
+  font-size: 20px;
+}
+
+body {
+  background-color: #0a0a0f;
+  color: #fafafa;
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  overflow: hidden; /* the TV UI is a fixed frame; pages scroll internally */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Kill the default browser focus outline — we draw our own accent ring on the
+   spatial-navigation ".focused" class so it's consistent across the remote. */
+* {
+  outline: none;
+}
+
+/* Soft crossfade for the pinned hero as it swaps to the focused title. */
+@keyframes tvFade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.tv-fade {
+  animation: tvFade 0.28s ease-out;
+}
+
+.katakana {
+  font-family: var(--font-jp), sans-serif;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #7c7a8a;
+}
+
+/* Thin, unobtrusive scrollbars for any internal scroll areas. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.3);
+  border-radius: 3px;
+}

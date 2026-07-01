@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tsumi_base">#0A0A0F</color>
+    <color name="tsumi_primary">#7C3AED</color>
+    <color name="tsumi_accent">#A78BFA</color>
+</resources>
