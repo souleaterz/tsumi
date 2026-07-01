@@ -4,6 +4,7 @@ import { Providers } from '@/components/providers';
 import { Navbar } from '@/components/layout/navbar';
 import { Footer } from '@/components/layout/footer';
 import { AdLoader } from '@/components/ad-loader';
+import { AdGuard } from '@/components/ad-guard';
 import { DesktopTitleBar } from '@/components/desktop/title-bar';
 import './globals.css';
 
@@ -49,6 +50,7 @@ export default function RootLayout({
       className={`${bebas.variable} ${inter.variable} ${notoJp.variable}`}
     >
       <body className="min-h-screen overflow-x-hidden">
+        <AdGuard />
         <Providers>
           <DesktopTitleBar />
           <Navbar />
