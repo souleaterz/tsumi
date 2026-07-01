@@ -12,7 +12,12 @@ type ScrollOpt = boolean | ScrollIntoViewOptions;
 function scrollInto(node: HTMLElement | null, opt: ScrollOpt) {
   if (!node || !opt) return;
   node.scrollIntoView({
-    behavior: 'smooth',
+    // Instant, not smooth: the spatial-navigation library measures element
+    // positions with getBoundingClientRect on each D-pad move. A smooth-scroll
+    // animation left the neighbours mid-flight, so rapid presses would land two
+    // cells over (the "skips every second poster" bug). Snapping keeps geometry
+    // stable — and instant snap is the norm for TV grids anyway.
+    behavior: 'auto',
     block: 'nearest',
     inline: 'center',
     ...(typeof opt === 'object' ? opt : {}),

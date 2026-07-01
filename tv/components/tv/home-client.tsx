@@ -35,7 +35,7 @@ export function HomeClient({
     <div className="flex h-full flex-col">
       {/* Pinned — stays in place while the rails scroll under it. */}
       <div className="shrink-0">
-        <Hero media={active} autoFocusPlay={false} />
+        <Hero media={active} />
       </div>
 
       {/* The only part that scrolls. */}

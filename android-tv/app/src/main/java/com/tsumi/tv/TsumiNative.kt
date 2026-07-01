@@ -32,7 +32,9 @@ class TsumiNative(
     fun streamTorrent(reqId: Int, magnet: String) {
         streamer.start(
             magnet = magnet,
-            timeoutMs = 30_000,
+            // Peer-discovery window. A Firestick on WiFi bootstrapping DHT cold
+            // needs longer than a desktop; 30s was cutting healthy torrents off.
+            timeoutMs = 60_000,
             onReady = { path ->
                 resolve(reqId, JSONObject().put("ok", true).put("url", "file://$path").toString())
             },
