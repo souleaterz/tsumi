@@ -17,6 +17,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Needed for the release step to create/update the GitHub Release on tags.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: android-tv
