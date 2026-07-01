@@ -10,15 +10,22 @@ const nextConfig = {
     externalDir: true,
   },
   webpack: (config) => {
-    // A shared file in ../lib that imports a bare package (e.g. 'aniwatch')
-    // resolves node_modules relative to ITS location — i.e. the repo root, which
-    // Vercel doesn't install when the Root Directory is tv/. Force resolution to
-    // prefer this app's own node_modules so those deps are found in isolation.
+    // A shared file in ../lib that imports a bare package resolves node_modules
+    // relative to ITS location — the repo root, which Vercel doesn't install
+    // when the Root Directory is tv/. Prefer this app's own node_modules.
     config.resolve.modules = [
       path.join(__dirname, 'node_modules'),
       'node_modules',
       ...(config.resolve.modules || []),
     ];
+    // The TV app never uses the HiAnime provider (RD/torrents only), so stub out
+    // `aniwatch` and keep its heavy cheerio/parse5/entities tree out of the
+    // bundle. provider.ts only references HiAnime inside gated code that never
+    // runs here.
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      aniwatch: path.join(__dirname, 'stubs/aniwatch.js'),
+    };
     return config;
   },
   images: {
