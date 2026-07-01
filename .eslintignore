@@ -1,0 +1,4 @@
+# The Fire TV app (tv/) and Android shell (android-tv/) are separate projects
+# with their own tooling — the root build must not lint or type-check them.
+tv/
+android-tv/
