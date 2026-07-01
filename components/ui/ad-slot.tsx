@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-
-const NETWORK = process.env.NEXT_PUBLIC_AD_NETWORK;
+import { adUnitAt, adsEnabled } from '@/lib/ads';
 
 // Process-wide cache of Pro status — one fetch per page load.
 let proCache: { isPro: boolean; at: number } | null = null;
@@ -19,32 +18,37 @@ async function fetchIsPro(): Promise<boolean> {
   }
 }
 
-type SlotName = 'home-banner' | 'detail-banner' | 'watch-banner';
-
 /**
- * Generic ad slot — renders a placeholder div tagged for the configured ad
- * network. The network's loader script (added to the root layout via
- * NEXT_PUBLIC_AD_SCRIPT) finds these by `data-tsumi-ad-slot` and fills them.
+ * Adsterra native-banner ad slot.
  *
- * Hidden entirely when:
- *   • No ad network is configured (`NEXT_PUBLIC_AD_NETWORK` unset), or
- *   • The viewer is a Tsumi Pro subscriber.
+ * Each slot maps to one ad unit (by index into `AD_UNITS` in lib/ads.ts). On
+ * mount it builds the exact pair Adsterra expects — a `#container-<key>` div
+ * plus the matching `invoke.js` <script> — inside this slot. Injecting the
+ * script per-mount (rather than once globally in the layout) is what makes it
+ * refill correctly on client-side navigation, where a global loader would only
+ * ever have scanned the first page it loaded on.
  *
- * Sizes are intentionally banner-friendly so they accept the IAB standard
- * 728×90 / 970×250 / 320×100 inventory most networks serve.
+ * Renders nothing when:
+ *   • ads are disabled (NEXT_PUBLIC_ADS_DISABLED=true or no units configured),
+ *   • there's no ad unit for this `unit` index (i.e. you haven't added a
+ *     second/third Adsterra zone yet — extra slots stay dormant), or
+ *   • the viewer is a Tsumi Pro subscriber.
  */
 export function AdSlot({
-  slot,
+  unit = 0,
   className = '',
 }: {
-  slot: SlotName;
+  /** Index into AD_UNITS. Distinct indexes → distinct Adsterra zones. */
+  unit?: number;
   className?: string;
 }) {
+  const adUnit = adsEnabled ? adUnitAt(unit) : undefined;
   const [show, setShow] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
 
+  // Decide whether to show (skip for Pro users).
   useEffect(() => {
-    if (!NETWORK) return;
+    if (!adUnit) return;
     let active = true;
     fetchIsPro().then((isPro) => {
       if (active && !isPro) setShow(true);
@@ -52,22 +56,43 @@ export function AdSlot({
     return () => {
       active = false;
     };
-  }, []);
+  }, [adUnit]);
 
-  if (!show) return null;
+  // Build the Adsterra container + invoke script once we've decided to show.
+  useEffect(() => {
+    if (!show || !adUnit) return;
+    const host = hostRef.current;
+    if (!host) return;
+
+    host.innerHTML = '';
+
+    const container = document.createElement('div');
+    container.id = `container-${adUnit.key}`;
+    host.appendChild(container);
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.setAttribute('data-cfasync', 'false');
+    script.src = adUnit.src;
+    host.appendChild(script);
+
+    return () => {
+      host.innerHTML = '';
+    };
+  }, [show, adUnit]);
+
+  if (!adUnit || !show) return null;
 
   return (
     <aside
-      ref={ref}
-      data-tsumi-ad-slot={slot}
-      data-tsumi-ad-network={NETWORK}
       aria-label="Advertisement"
-      className={`relative my-6 mx-auto flex w-full max-w-[970px] items-center justify-center overflow-hidden rounded-xl border border-white/5 bg-surface/30 ${className}`}
+      className={`relative my-6 mx-auto flex w-full max-w-[970px] flex-col items-center justify-center overflow-hidden rounded-xl border border-white/5 bg-surface/30 p-2 ${className}`}
       style={{ minHeight: 90 }}
     >
-      <span className="text-[10px] uppercase tracking-[0.3em] text-zinc-600">
+      <span className="mb-1 text-[10px] uppercase tracking-[0.3em] text-zinc-600">
         Advertisement
       </span>
+      <div ref={hostRef} className="w-full" />
     </aside>
   );
 }

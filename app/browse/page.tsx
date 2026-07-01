@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { searchAnime, getGenres } from '@/lib/anilist/client';
 import { AnimeCard } from '@/components/ui/anime-card';
 import { FilterBar } from '@/components/browse/filter-bar';
+import { AdSlot } from '@/components/ui/ad-slot';
 import { ChevronLeft, ChevronRight, SearchX } from 'lucide-react';
 
 export const revalidate = 300;
@@ -80,6 +81,9 @@ export default async function BrowsePage({
           ))}
         </div>
       )}
+
+      {/* Ad slot — between the results grid and pagination. */}
+      {media.length > 0 && <AdSlot unit={0} />}
 
       {/* Pagination */}
       {media.length > 0 && (

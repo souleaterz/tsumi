@@ -66,7 +66,7 @@ export default async function HomePage() {
 
       {/* Ad slot — between Trending and Seasonal rows. */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <AdSlot slot="home-banner" />
+        <AdSlot unit={0} />
       </div>
 
       {/* SEASONAL — diagonal accent band */}
@@ -93,6 +93,12 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Ad slot — before the all-time popular grid. Dormant until a 2nd
+          Adsterra zone is added (NEXT_PUBLIC_ADSTERRA_UNITS / lib/ads.ts). */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <AdSlot unit={1} />
+      </div>
 
       {/* ALL-TIME POPULAR GRID */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">

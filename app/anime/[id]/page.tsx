@@ -212,7 +212,7 @@ export default async function AnimeDetailPage({ params }: Props) {
         )}
 
         {/* Ad slot — between trailer/synopsis and the episode list. */}
-        <AdSlot slot="detail-banner" />
+        <AdSlot unit={0} />
 
         {/* Episodes */}
         <section className="mt-14">

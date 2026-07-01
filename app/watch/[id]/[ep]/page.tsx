@@ -153,7 +153,7 @@ export default async function WatchPage({ params, searchParams }: Props) {
       )}
 
       {/* Ad slot — below the player + episode metadata. */}
-      <AdSlot slot="watch-banner" />
+      <AdSlot unit={0} />
     </div>
   );
 
