@@ -17,7 +17,8 @@
     "paths": {
       "@/*": ["./*"],
       "@shared/*": ["../lib/*"],
-      "@shared-types/*": ["../types/*"]
+      "@shared-types/*": ["../types/*"],
+      "aniwatch": ["./node_modules/aniwatch/dist/index.d.ts"]
     }
   },
   "include": [
